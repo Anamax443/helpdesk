@@ -1,0 +1,7 @@
+# Zkopíruj na .dev.vars (gitignored) a doplň. Produkce → `wrangler secret put NAZEV`.
+
+# HMAC klíč pro podepsané pozvánkové tokeny (src/token.ts).
+INVITE_SECRET="change-me-dev-secret"
+
+# Volitelné — Claude vrstva (placené). Prázdné = běží jen free Workers AI.
+ANTHROPIC_API_KEY=""

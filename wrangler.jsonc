@@ -1,0 +1,56 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "helpdesk",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+
+  // Custom doména (zóna maxferit.com je v účtu bass443). wrangler vytvoří DNS + route.
+  "routes": [
+    { "pattern": "helpdesk.maxferit.com", "custom_domain": true }
+  ],
+
+  // Statické SPA (portál + interní konzole) servíruje stejný Worker.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  // Centrální relační data (multi-tenant, KPI, cross-firma dotazy).
+  // database_id doplnit po `wrangler d1 create helpdesk-db`.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "helpdesk-db", "database_id": "REPLACE_AFTER_CREATE" }
+  ],
+
+  // Přílohy + printscreeny (zero egress). Vytvořit: `wrangler r2 bucket create helpdesk-attachments`.
+  "r2_buckets": [
+    { "binding": "ATTACHMENTS", "bucket_name": "helpdesk-attachments" }
+  ],
+
+  // Živý stav ticketu/vlákna + dvousměrný Gantt (WebSocket koordinace).
+  "durable_objects": {
+    "bindings": [
+      { "name": "TICKET", "class_name": "TicketRoom" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TicketRoom"] }
+  ],
+
+  // Workers AI (default free vrstva: triage, embeddings, překlad).
+  "ai": { "binding": "AI" },
+
+  // Vectorize (podobné tickety / duplicity) — odkomentovat po:
+  //   `wrangler vectorize create helpdesk-embeddings --dimensions=768 --metric=cosine`
+  // "vectorize": [
+  //   { "binding": "VECTORIZE", "index_name": "helpdesk-embeddings" }
+  // ],
+
+  // Necitlivé proměnné. Tajemství (INVITE_SECRET, ANTHROPIC_API_KEY) → `wrangler secret put`.
+  "vars": {
+    "PUBLIC_BASE_URL": "http://localhost:8787",
+    // workers-ai (free, default) | claude (placené) | off — přepínatelný AI backend.
+    "AI_PROVIDER": "workers-ai"
+  }
+}
