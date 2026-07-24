@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.3 — 2026-07-24 · JIRA klíče, Projekty, Easy
+- Alfanumerická čísla ticketů (JIRA-style): `project.key` (prefix) + per-projekt číslování → `IT-270`.
+  `ticket_key` počítán z klíče projektu → přejmenování klíče přepíše všechny tickety. Migrace `0002`.
+- Sekce **Projekty**: `POST /api/projects` (create), `POST /api/projects/:id` (update podmínek: klíč, název, max hloubka, viditelnost) + frontend správa a nav.
+- **Easy mód = jen popis** problému (název / zařazení / priorita = AI; zatím default projekt + odvozený název).
+- Expirace tokenu editovatelná **konkrétním datem** (date picker) + presety; backend `expires_at`.
+- Favicon 🎫 (místo default globusu prohlížeče).
+
 ## v0.1.2 — 2026-07-24 · Admin konzole
 - Jednotný login s routingem dle tokenu: `/api/me` vrací `env` (admin|user), odvozené z `is_provider` (rozšiřitelné).
 - Admin API (jen provider, guard 403): `GET/POST /api/admin/companies`, `.../token` (regenerace + expirace), `.../revoke`.

@@ -27,7 +27,7 @@ src/token.ts          HMAC pozvánkové tokeny
 src/retention.ts      Vynucení retenční politiky (GDPR) — anonymizace/smazání
 src/do.ts             TicketRoom Durable Object (živý kanál)
 migrations/           0001_retention.sql (legal_hold + retention_policy)
-public/               SPA (index.html, app.css, app.js) — login tokenem, seznam, Easy/Extended, detail
+public/               SPA — login tokenem (routing admin/user), tickety (JIRA klíče), Projekty, Firmy (admin), Easy/Extended
 docs/                 prezentace.html, manazersky-vystup.html, STATUS(.en).md
 ```
 
@@ -48,6 +48,7 @@ docs/                 prezentace.html, manazersky-vystup.html, STATUS(.en).md
 - [x] **Verify-core** — `tsc` 0 chyb + lokální `wrangler dev` smoke test prošel (create/message/status + guardy 400/401)
 - [x] **Retenční politika (GDPR)** — per-firma politika + legal-hold + denní cron `0 3 * * *`; ověřeno (anonymizace jen ticketů bez holdu) + nasazeno
 - [x] **Admin konzole (provider)** — jednotný login, routing dle tokenu (admin/user), správa firem + tokenů (generování / expirace / revokace); ověřeno + nasazeno
+- [x] **JIRA klíče + Projekty + Easy** — alfanumerická čísla ticketů (IT-270, per-projekt), sekce Projekty (podmínky projektu), Easy mód = jen popis (AI dopočítá zbytek); ověřeno + nasazeno
 - [x] Dokumentace CS+EN, prezentace, manažerský výstup
 - [x] **Produkční nasazení** — živě na helpdesk.maxferit.cz (custom doména + workers.dev), remote D1 + secret nastaveny
 - [ ] Další moduly: AI vrstva (`src/ai.ts`), rozpočet/schvalování, Gantt/Kanban/KPI, pozvánky, e-mail (teď stub)
