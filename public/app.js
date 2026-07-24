@@ -30,7 +30,17 @@
       copied: "Zkopírováno", m1: "1 měsíc", m6: "6 měsíců", m12: "12 měsíců", preset: "rychle",
       projects_nav: "Projekty", new_project: "Nový projekt", project_key: "Klíč", max_depth: "Max. hloubka",
       visibility_col: "Viditelnost", save: "Uložit", revoke_self: "Nelze revokovat vlastní přístup",
-      admin_email: "E-mail admina", permanent: "trvalý 🔒", theme: "Motiv (světlý/tmavý)" },
+      admin_email: "E-mail admina", permanent: "trvalý 🔒", theme: "Motiv (světlý/tmavý)",
+      tt_key: "Prefix v číslech ticketů (např. IT → IT-270)",
+      tt_depth: "Kolik úrovní podúkolů lze zanořit pod úkol (epic → úkol → podúkol → …). Např. 5 = až 5 úrovní.",
+      tt_vis: "Výchozí viditelnost ticketů projektu: sdílené (vidí i zákazník) / interní (jen tvoje strana)",
+      tt_num: "Číslo ticketu ve formátu KLÍČ-N (číslováno zvlášť pro každý projekt)",
+      tt_status: "Stav ticketu v životním cyklu (Nový → Otevřený → V řešení → …)",
+      tt_prio: "Priorita: blokační / kritická / vysoká / nízká (ovlivňuje SLA)",
+      tt_created: "Datum a čas vytvoření ticketu",
+      tt_token: "Přístupový token firmy — kdo ho má, přihlásí se do jejího prostředí",
+      tt_email: "E-mail admina — kotva pro obnovu přístupu",
+      tt_exp: "Do kdy token platí (admin token je vždy trvalý)" },
     en: { app: "HelpDesk", login_p: "Enter your company access token", token_ph: "company token",
       connect: "Connect", tickets: "Tickets", new_ticket: "New ticket", logout: "Log out",
       back: "← Back", number: "No.", title: "Title", status: "Status", priority: "Priority",
@@ -50,7 +60,17 @@
       copied: "Copied", m1: "1 month", m6: "6 months", m12: "12 months", preset: "quick",
       projects_nav: "Projects", new_project: "New project", project_key: "Key", max_depth: "Max depth",
       visibility_col: "Visibility", save: "Save", revoke_self: "Cannot revoke your own access",
-      admin_email: "Admin email", permanent: "permanent 🔒", theme: "Theme (light/dark)" },
+      admin_email: "Admin email", permanent: "permanent 🔒", theme: "Theme (light/dark)",
+      tt_key: "Prefix in ticket numbers (e.g. IT → IT-270)",
+      tt_depth: "How many subtask levels can nest under a task (epic → task → subtask → …). E.g. 5 = up to 5 levels.",
+      tt_vis: "Default ticket visibility: shared (customer sees it) / internal (your side only)",
+      tt_num: "Ticket number as KEY-N (numbered per project)",
+      tt_status: "Ticket status in the lifecycle (New → Open → In progress → …)",
+      tt_prio: "Priority: blocking / critical / high / low (drives SLA)",
+      tt_created: "Ticket creation date and time",
+      tt_token: "Company access token — whoever has it logs into that company",
+      tt_email: "Admin email — recovery anchor",
+      tt_exp: "Token validity (admin token is always permanent)" },
   };
   const t = (k) => (T[state.lang][k] ?? T.cs[k] ?? k);
 
@@ -210,7 +230,7 @@
       <span class="spacer"></span>
       ${nav}
       <span class="chip ${on ? "" : "off"}"><span class="dot">●</span> ${on ? "AI · " + esc(ai) : "AI off"}</span>
-      <span class="chip" title="build ${esc((state.health && state.health.built) || "")}">${esc((state.health && state.health.commit) || "dev")}</span>
+      <span class="chip" title="commit ${esc((state.health && state.health.commit) || "dev")} · build ${esc((state.health && state.health.built) || "")}">${esc((state.health && state.health.commit) || "dev")}${state.health && state.health.built ? " · " + new Date(state.health.built).toLocaleString(state.lang === "cs" ? "cs-CZ" : "en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</span>
       <button class="btn ghost sm" data-act="theme" title="${t("theme")}">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button>
       <button class="btn ghost sm" data-act="lang">${state.lang.toUpperCase()}</button>
       <button class="btn ghost sm" data-act="logout">${t("logout")}</button></header>`;
@@ -247,7 +267,7 @@
         <button class="btn primary" data-act="admincreate">+ ${t("new_firm")}</button>
       </div></div>
       <div class="tablewrap"><table><thead><tr>
-        <th>${t("firm_name")}</th><th>${t("token_col")}</th><th>${t("admin_email")}</th><th>${t("expiry")}</th><th>${t("projects_col")}</th><th>${t("actions")}</th>
+        <th>${t("firm_name")}</th><th title="${t("tt_token")}">${t("token_col")}</th><th title="${t("tt_email")}">${t("admin_email")}</th><th title="${t("tt_exp")}">${t("expiry")}</th><th>${t("projects_col")}</th><th>${t("actions")}</th>
       </tr></thead><tbody>${rows}</tbody></table></div></main>`;
   }
   function viewLogin() {
@@ -274,7 +294,7 @@
         <select id="fp" data-change="filter">${opts}</select>
         <button class="btn primary" data-act="goto-create">+ ${t("new_ticket")}</button></div>
       <div class="tablewrap"><table><thead><tr>
-        <th>${t("number")}</th><th>${t("title")}</th><th>${t("status")}</th><th>${t("priority")}</th><th>${t("created")}</th>
+        <th title="${t("tt_num")}">${t("number")}</th><th>${t("title")}</th><th title="${t("tt_status")}">${t("status")}</th><th title="${t("tt_prio")}">${t("priority")}</th><th title="${t("tt_created")}">${t("created")}</th>
       </tr></thead><tbody>${rows}</tbody></table></div></main>`;
   }
   function viewCreate() {
@@ -352,7 +372,7 @@
         <button class="btn primary" data-act="projcreate">+ ${t("new_project")}</button>
       </div></div>
       <div class="tablewrap"><table><thead><tr>
-        <th>${t("project_key")}</th><th>${t("title")}</th><th>${t("max_depth")}</th><th>${t("visibility_col")}</th><th>${t("actions")}</th>
+        <th title="${t("tt_key")}">${t("project_key")}</th><th>${t("title")}</th><th title="${t("tt_depth")}">${t("max_depth")}</th><th title="${t("tt_vis")}">${t("visibility_col")}</th><th>${t("actions")}</th>
       </tr></thead><tbody>${rows}</tbody></table></div></main>`;
   }
   function render() {
