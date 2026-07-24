@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2 — 2026-07-24 · Admin konzole
+- Jednotný login s routingem dle tokenu: `/api/me` vrací `env` (admin|user), odvozené z `is_provider` (rozšiřitelné).
+- Admin API (jen provider, guard 403): `GET/POST /api/admin/companies`, `.../token` (regenerace + expirace), `.../revoke`.
+- Frontend: admin konzole (správa firem, generování/expirace/revokace tokenů), nav Firmy/Tickety, i18n CS/EN.
+- Ověřeno lokálně i naživo (routing, 403 guard, regen, revoke) + nasazeno.
+
 ## v0.1.1 — 2026-07-24 · Retence (GDPR)
 - Retenční politika per firma (`retention_policy`): kategorie × doba uchování × akce (anonymize/delete); opt-in.
 - `issue.legal_hold` — vynětí ticketu z retence (spor/litigace).

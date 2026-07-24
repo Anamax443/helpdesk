@@ -12,6 +12,7 @@ _Updated: 2026-07-24 · version v0.1_ · 🇨🇿 [STATUS.md](./STATUS.md)
 | Verify-core (typecheck + smoke test) | ✅ Passed |
 | Production deployment | ✅ Live — [helpdesk.maxferit.cz](https://helpdesk.maxferit.cz) |
 | Data retention (GDPR) | ✅ Live — per-company + legal hold + daily cron |
+| Admin console (company tokens) | ✅ Live — token-based routing + company/token management |
 | AI layer / budget / Gantt / Kanban / KPI | ⏳ Backlog |
 
 ## Core done

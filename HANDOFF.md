@@ -20,8 +20,8 @@ https://claude.ai/code/artifact/efc9654c-c8f4-45e4-b7de-325fc11e6365
 ## Struktura
 ```
 schema.sql            D1 model (15 tabulek)
-src/index.ts          Worker: router + API (tickets, messages, status, retention, legal-hold)
-                      + scheduled cron (retence)
+src/index.ts          Worker: router + API (me, tickets, messages, status, retention, legal-hold,
+                      admin: companies/token/revoke) + scheduled cron (retence)
 src/types.ts          Env + stavy + povolené přechody
 src/token.ts          HMAC pozvánkové tokeny
 src/retention.ts      Vynucení retenční politiky (GDPR) — anonymizace/smazání
@@ -47,14 +47,15 @@ docs/                 prezentace.html, manazersky-vystup.html, STATUS(.en).md
 - [x] **Frontend SPA** — login tokenem, seznam, Easy/Extended zakládání, detail + vlákna + přechody, i18n CS/EN
 - [x] **Verify-core** — `tsc` 0 chyb + lokální `wrangler dev` smoke test prošel (create/message/status + guardy 400/401)
 - [x] **Retenční politika (GDPR)** — per-firma politika + legal-hold + denní cron `0 3 * * *`; ověřeno (anonymizace jen ticketů bez holdu) + nasazeno
+- [x] **Admin konzole (provider)** — jednotný login, routing dle tokenu (admin/user), správa firem + tokenů (generování / expirace / revokace); ověřeno + nasazeno
 - [x] Dokumentace CS+EN, prezentace, manažerský výstup
 - [x] **Produkční nasazení** — živě na helpdesk.maxferit.cz (custom doména + workers.dev), remote D1 + secret nastaveny
 - [ ] Další moduly: AI vrstva (`src/ai.ts`), rozpočet/schvalování, Gantt/Kanban/KPI, pozvánky, e-mail (teď stub)
 
-## Backlog — provider-admin konzole (tokeny firem)
-Admin (maxferit) spravuje **tokeny jednotlivých firem s expirací per token** (vydávání, revokace,
-platnost). Dnes schéma drží `company.token` + `company.token_expires`; plná konzole (registr tokenů,
-MFA, logování přístupů) = samostatný admin modul — viz návrh sekce Multi-tenant.
+## Admin konzole (provider) — HOTOVO (základ)
+Jednotný login: token → routing na **admin** (`is_provider=1`) nebo **user** prostředí — `/api/me` vrací `env`
+(rozšiřitelné o další prostředí). Admin spravuje firmy a jejich **tokeny s expirací** (generování / expirace /
+revokace) přes `/api/admin/companies*`. Zbývá (backlog): MFA, logování přístupů, správa uživatelů firem.
 
 ## Zprovoznění (lokálně)
 ```powershell

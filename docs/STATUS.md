@@ -12,6 +12,7 @@ _Aktualizováno: 2026-07-24 · verze v0.1_ · 🇬🇧 [STATUS.en.md](./STATUS.e
 | Verify-core (typecheck + smoke test) | ✅ Prošel |
 | Produkční nasazení | ✅ Živě — [helpdesk.maxferit.cz](https://helpdesk.maxferit.cz) |
 | Retenční politika (GDPR) | ✅ Živě — per-firma + legal-hold + denní cron |
+| Admin konzole (tokeny firem) | ✅ Živě — routing dle tokenu + správa firem/tokenů |
 | AI vrstva / rozpočet / Gantt / Kanban / KPI | ⏳ Backlog |
 
 ## Hotové jádro
