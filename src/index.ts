@@ -121,6 +121,64 @@ async function setHold(env: Env, company: any, id: string, req: Request): Promis
   return json({ id, legal_hold: hold });
 }
 
+// ── admin (provider) ─────────────────────────────────────────────────────────
+function genToken(): string {
+  const b = new Uint8Array(15);
+  crypto.getRandomValues(b);
+  const s = btoa(String.fromCharCode(...b)).replace(/[+/=]/g, "");
+  return "hd_" + s;
+}
+
+/** Prostředí odvozené z tokenu — sem přibude případné další (rozšiřitelné). */
+function envForCompany(company: any): string {
+  return company.is_provider === 1 ? "admin" : "user";
+}
+
+async function listCompanies(env: Env): Promise<Response> {
+  const { results } = await env.DB.prepare(
+    `SELECT c.id, c.name, c.token, c.token_expires, c.is_provider, c.created_at,
+       (SELECT COUNT(*) FROM project p WHERE p.company_id = c.id) AS projects
+     FROM company c ORDER BY c.is_provider DESC, c.name`,
+  ).all();
+  return json({ companies: results });
+}
+
+async function createCompany(env: Env, req: Request): Promise<Response> {
+  const b = (await req.json().catch(() => ({}))) as Record<string, any>;
+  if (!b.name) return json({ error: "název je povinný" }, 400);
+  const id = uuid();
+  const token = genToken();
+  const expires = b.expires_days ? now() + Number(b.expires_days) * 86400 : null;
+  await env.DB.prepare(
+    `INSERT INTO company (id, name, token, token_expires, is_provider, default_language, created_at)
+     VALUES (?,?,?,?,0,'cs',?)`,
+  ).bind(id, b.name, token, expires, now()).run();
+  await audit(env, null, "company.create", "company", id, null, { name: b.name });
+  return json({ id, name: b.name, token, token_expires: expires }, 201);
+}
+
+async function setCompanyToken(env: Env, id: string, req: Request): Promise<Response> {
+  const c = await env.DB.prepare(`SELECT id FROM company WHERE id = ?`).bind(id).first();
+  if (!c) return json({ error: "firma nenalezena" }, 404);
+  const b = (await req.json().catch(() => ({}))) as Record<string, any>;
+  const expires = b.expires_days == null ? null : now() + Number(b.expires_days) * 86400;
+  let token: string | null = null;
+  if (b.regenerate) {
+    token = genToken();
+    await env.DB.prepare(`UPDATE company SET token = ?, token_expires = ? WHERE id = ?`).bind(token, expires, id).run();
+  } else {
+    await env.DB.prepare(`UPDATE company SET token_expires = ? WHERE id = ?`).bind(expires, id).run();
+  }
+  await audit(env, null, "company.token", "company", id, null, { regenerate: !!b.regenerate, token_expires: expires });
+  return json({ id, token, token_expires: expires });
+}
+
+async function revokeCompany(env: Env, id: string): Promise<Response> {
+  await env.DB.prepare(`UPDATE company SET token_expires = ? WHERE id = ?`).bind(now() - 1, id).run();
+  await audit(env, null, "company.revoke", "company", id, null, null);
+  return json({ id, revoked: true });
+}
+
 async function createTicket(env: Env, company: any, req: Request): Promise<Response> {
   const b = (await req.json().catch(() => ({}))) as Record<string, any>;
   if (!b.project_id || !b.title) return json({ error: "project_id a title jsou povinné" }, 400);
@@ -328,6 +386,23 @@ export default {
           });
         if (p === "/api/retention" && req.method === "GET") return await listRetention(env, company);
         if (p === "/api/retention" && req.method === "POST") return await setRetention(env, company, req);
+
+        // kdo jsem + kam patřím (routing prostředí podle tokenu)
+        if (p === "/api/me" && req.method === "GET")
+          return json({ id: company.id, name: company.name, is_provider: company.is_provider, env: envForCompany(company) });
+
+        // admin API — jen provider (is_provider=1)
+        if (p.startsWith("/api/admin/")) {
+          if (company.is_provider !== 1) return json({ error: "jen provider-admin" }, 403);
+          if (p === "/api/admin/companies" && req.method === "GET") return await listCompanies(env);
+          if (p === "/api/admin/companies" && req.method === "POST") return await createCompany(env, req);
+          const am = p.match(/^\/api\/admin\/companies\/([^/]+)(\/token|\/revoke)$/);
+          if (am && req.method === "POST") {
+            if (am[2] === "/token") return await setCompanyToken(env, am[1], req);
+            if (am[2] === "/revoke") return await revokeCompany(env, am[1]);
+          }
+        }
+
         if (p === "/api/tickets" && req.method === "GET") return await listTickets(env, company, url);
         if (p === "/api/tickets" && req.method === "POST") return await createTicket(env, company, req);
 

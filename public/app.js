@@ -4,8 +4,8 @@
   const state = {
     token: localStorage.getItem("hd_token") || "",
     lang: localStorage.getItem("hd_lang") || "cs",
-    view: "login",
-    meta: null, projects: [], health: null,
+    view: "login", env: "user",
+    me: null, meta: null, projects: [], health: null, companies: [],
     tickets: [], current: null, createMode: "easy", filterProject: "",
   };
 
@@ -21,7 +21,11 @@
       product_line: "Produktová řada", functional_area: "Funkční oblast", estimate: "Odhad (h)",
       messages: "Komunikace", add_message: "Přidat zprávu", message_ph: "Napište zprávu…",
       send: "Odeslat", shared: "Sdílené", internal: "Interní", internal_note: "interní",
-      change_status: "Změnit stav", apply: "Použít", none: "—", bad_token: "Neplatný token" },
+      change_status: "Změnit stav", apply: "Použít", none: "—", bad_token: "Neplatný token",
+      admin: "Admin", firms: "Firmy", env_user: "Tickety", new_firm: "Nová firma", firm_name: "Název firmy",
+      expiry: "Expirace", no_expiry: "bez expirace", token_col: "Token", projects_col: "Projekty",
+      actions: "Akce", regen: "Nový token", revoke: "Revokovat", expired: "vypršel", copy: "Kopírovat",
+      copied: "Zkopírováno", m1: "1 měsíc", m6: "6 měsíců", m12: "12 měsíců" },
     en: { app: "HelpDesk", login_p: "Enter your company access token", token_ph: "company token",
       connect: "Connect", tickets: "Tickets", new_ticket: "New ticket", logout: "Log out",
       back: "← Back", number: "No.", title: "Title", status: "Status", priority: "Priority",
@@ -33,7 +37,11 @@
       product_line: "Product line", functional_area: "Functional area", estimate: "Estimate (h)",
       messages: "Messages", add_message: "Add message", message_ph: "Write a message…",
       send: "Send", shared: "Shared", internal: "Internal", internal_note: "internal",
-      change_status: "Change status", apply: "Apply", none: "—", bad_token: "Invalid token" },
+      change_status: "Change status", apply: "Apply", none: "—", bad_token: "Invalid token",
+      admin: "Admin", firms: "Companies", env_user: "Tickets", new_firm: "New company", firm_name: "Company name",
+      expiry: "Expiry", no_expiry: "no expiry", token_col: "Token", projects_col: "Projects",
+      actions: "Actions", regen: "New token", revoke: "Revoke", expired: "expired", copy: "Copy",
+      copied: "Copied", m1: "1 month", m6: "6 months", m12: "12 months" },
   };
   const t = (k) => (T[state.lang][k] ?? T.cs[k] ?? k);
 
@@ -75,9 +83,12 @@
     try { state.health = await fetch("/api/health").then((r) => r.json()); } catch {}
     if (!state.token) { state.view = "login"; return render(); }
     try {
+      state.me = await api("/me");
+      state.env = state.me.env || "user";
       state.meta = await api("/meta");
       state.projects = (await api("/projects")).projects || [];
-      state.view = "list"; await loadTickets();
+      if (state.env === "admin") { await loadCompanies(); state.view = "admin"; render(); }
+      else { state.view = "list"; await loadTickets(); }
     } catch (e) {
       if (e.status === 401) { localStorage.removeItem("hd_token"); state.token = ""; state.view = "login"; toast(t("bad_token"), true); }
       render();
@@ -87,6 +98,9 @@
     const q = state.filterProject ? "?project=" + encodeURIComponent(state.filterProject) : "";
     state.tickets = (await api("/tickets" + q)).tickets || [];
     render();
+  }
+  async function loadCompanies() {
+    state.companies = (await api("/admin/companies")).companies || [];
   }
   async function openTicket(id) {
     state.current = await api("/tickets/" + id); state.view = "detail"; render();
@@ -115,15 +129,79 @@
     await api("/tickets/" + state.current.issue.id + "/status", { method: "POST", body: JSON.stringify({ to }) });
     toast(statusLabel(to)); await openTicket(state.current.issue.id);
   }
+  async function showToken(tok) {
+    if (!tok) return;
+    try { await navigator.clipboard.writeText(tok); toast(t("copied") + ": " + tok); }
+    catch { toast(tok); }
+  }
+  async function adminCreate() {
+    const name = document.getElementById("nc_name").value.trim();
+    if (!name) return toast(t("firm_name"), true);
+    const days = document.getElementById("nc_exp").value;
+    const r = await api("/admin/companies", { method: "POST", body: JSON.stringify({ name, expires_days: days ? parseInt(days) : null }) });
+    await showToken(r.token); await loadCompanies(); render();
+  }
+  async function adminRegen(id) {
+    const days = document.getElementById("exp_" + id).value;
+    const r = await api("/admin/companies/" + id + "/token", { method: "POST", body: JSON.stringify({ regenerate: true, expires_days: days ? parseInt(days) : null }) });
+    await showToken(r.token); await loadCompanies(); render();
+  }
+  async function adminExpiry(id) {
+    const days = document.getElementById("exp_" + id).value;
+    await api("/admin/companies/" + id + "/token", { method: "POST", body: JSON.stringify({ expires_days: days ? parseInt(days) : null }) });
+    toast(t("expiry")); await loadCompanies(); render();
+  }
+  async function adminRevoke(id) {
+    await api("/admin/companies/" + id + "/revoke", { method: "POST" });
+    toast(t("revoke")); await loadCompanies(); render();
+  }
 
   // ---- views ----
   function header() {
     const ai = state.health && state.health.ai, on = ai && ai !== "off";
+    const adminNav = state.env === "admin"
+      ? `<button class="btn ghost sm ${state.view === "admin" ? "on" : ""}" data-act="go-admin">${t("firms")}</button>
+         <button class="btn ghost sm ${state.view !== "admin" ? "on" : ""}" data-act="go-tickets">${t("env_user")}</button>`
+      : "";
     return `<header class="top"><span class="brand">🎫 ${t("app")}</span>
-      <span class="chip ${on ? "" : "off"}"><span class="dot">●</span> ${on ? "AI · " + esc(ai) : "AI off"}</span>
+      ${state.env === "admin" ? `<span class="chip"><span class="dot">●</span> ${t("admin")}</span>` : ""}
       <span class="spacer"></span>
+      ${adminNav}
+      <span class="chip ${on ? "" : "off"}"><span class="dot">●</span> ${on ? "AI · " + esc(ai) : "AI off"}</span>
       <button class="btn ghost sm" data-act="lang">${state.lang.toUpperCase()}</button>
       <button class="btn ghost sm" data-act="logout">${t("logout")}</button></header>`;
+  }
+  function viewAdmin() {
+    const expSel = (id) => `<select id="${id}" style="max-width:150px">
+      <option value="">${t("no_expiry")}</option>
+      <option value="30">${t("m1")}</option>
+      <option value="180">${t("m6")}</option>
+      <option value="365">${t("m12")}</option></select>`;
+    const rows = state.companies.map((c) => {
+      const exp = !c.token_expires ? t("no_expiry")
+        : (c.token_expires * 1000 < Date.now()
+          ? `<span style="color:var(--crit)">${t("expired")}</span>`
+          : fmtDate(c.token_expires));
+      return `<tr>
+        <td>${esc(c.name)} ${c.is_provider ? `<span class="tag-int" style="color:var(--accent);border-color:var(--accent)">admin</span>` : ""}</td>
+        <td class="mono" data-act="copy" data-tok="${esc(c.token || "")}" title="${t("copy")}" style="cursor:pointer">${esc((c.token || "").slice(0, 10))}…</td>
+        <td>${exp}</td>
+        <td class="num">${c.projects}</td>
+        <td><div class="rowacts">${expSel("exp_" + c.id)}
+          <button class="btn sm" data-act="setexp" data-id="${esc(c.id)}">${t("apply")}</button>
+          <button class="btn sm" data-act="regen" data-id="${esc(c.id)}">${t("regen")}</button>
+          <button class="btn sm" data-act="revoke" data-id="${esc(c.id)}">${t("revoke")}</button></div></td></tr>`;
+    }).join("");
+    return header() + `<main>
+      <div class="toolbar"><h1>${t("firms")}</h1></div>
+      <div class="card" style="margin-bottom:16px"><div class="toolbar">
+        <input id="nc_name" placeholder="${t("firm_name")}" style="max-width:280px"/>
+        ${expSel("nc_exp")}
+        <button class="btn primary" data-act="admincreate">+ ${t("new_firm")}</button>
+      </div></div>
+      <div class="tablewrap"><table><thead><tr>
+        <th>${t("firm_name")}</th><th>${t("token_col")}</th><th>${t("expiry")}</th><th>${t("projects_col")}</th><th>${t("actions")}</th>
+      </tr></thead><tbody>${rows}</tbody></table></div></main>`;
   }
   function viewLogin() {
     return `<div class="login"><div class="card">
@@ -208,6 +286,7 @@
   }
   function render() {
     app.innerHTML = state.view === "login" ? viewLogin()
+      : state.view === "admin" ? viewAdmin()
       : state.view === "create" ? viewCreate()
       : state.view === "detail" ? viewDetail() : viewList();
   }
@@ -227,6 +306,13 @@
       else if (act === "create") { await submitCreate(); }
       else if (act === "send") { await sendMessage(); }
       else if (act === "status") { await applyStatus(); }
+      else if (act === "go-admin") { state.view = "admin"; await loadCompanies(); render(); }
+      else if (act === "go-tickets") { state.view = "list"; await loadTickets(); }
+      else if (act === "admincreate") { await adminCreate(); }
+      else if (act === "regen") { await adminRegen(el.dataset.id); }
+      else if (act === "setexp") { await adminExpiry(el.dataset.id); }
+      else if (act === "revoke") { await adminRevoke(el.dataset.id); }
+      else if (act === "copy") { try { await navigator.clipboard.writeText(el.dataset.tok); toast(t("copied")); } catch {} }
     } catch (err) { toast((err.data && err.data.error) || ("Chyba " + (err.status || "")), true); }
   });
   app.addEventListener("change", async (e) => {

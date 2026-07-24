@@ -120,3 +120,5 @@ td.num { font-family:"Cascadia Code",monospace; color:var(--muted); font-variant
 .seg { display:inline-flex; border:1px solid var(--border-strong); border-radius:7px; overflow:hidden; }
 .seg button { border:none; background:var(--surface); padding:7px 14px; font-size:13px; font-weight:600; color:var(--muted); }
 .seg button.on { background:var(--accent); color:#fff; }
+.btn.on { color:var(--accent); border-color:var(--accent); }
+.rowacts { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
