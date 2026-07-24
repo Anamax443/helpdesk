@@ -176,7 +176,7 @@ function envForCompany(company: any): string {
 
 async function listCompanies(env: Env): Promise<Response> {
   const { results } = await env.DB.prepare(
-    `SELECT c.id, c.name, c.token, c.token_expires, c.is_provider, c.created_at,
+    `SELECT c.id, c.name, c.token, c.token_expires, c.is_provider, c.recovery_email, c.created_at,
        (SELECT COUNT(*) FROM project p WHERE p.company_id = c.id) AS projects
      FROM company c ORDER BY c.is_provider DESC, c.name`,
   ).all();
@@ -190,18 +190,23 @@ async function createCompany(env: Env, req: Request): Promise<Response> {
   const token = genToken();
   const expires = parseExpiry(b);
   await env.DB.prepare(
-    `INSERT INTO company (id, name, token, token_expires, is_provider, default_language, created_at)
-     VALUES (?,?,?,?,0,'cs',?)`,
-  ).bind(id, b.name, token, expires, now()).run();
+    `INSERT INTO company (id, name, token, token_expires, is_provider, default_language, recovery_email, created_at)
+     VALUES (?,?,?,?,0,'cs',?,?)`,
+  ).bind(id, b.name, token, expires, b.recovery_email || null, now()).run();
   await audit(env, null, "company.create", "company", id, null, { name: b.name });
   return json({ id, name: b.name, token, token_expires: expires }, 201);
 }
 
 async function setCompanyToken(env: Env, id: string, req: Request): Promise<Response> {
-  const c = await env.DB.prepare(`SELECT id FROM company WHERE id = ?`).bind(id).first();
+  const c = await env.DB.prepare(`SELECT id, is_provider FROM company WHERE id = ?`)
+    .bind(id).first<{ id: string; is_provider: number }>();
   if (!c) return json({ error: "firma nenalezena" }, 404);
   const b = (await req.json().catch(() => ({}))) as Record<string, any>;
-  const expires = parseExpiry(b);
+  // Provider (admin) token NESMI expirovat, dokud neni obnova pres overeny e-mail.
+  const expires = c.is_provider === 1 ? null : parseExpiry(b);
+  if (b.recovery_email !== undefined) {
+    await env.DB.prepare(`UPDATE company SET recovery_email = ? WHERE id = ?`).bind(b.recovery_email || null, id).run();
+  }
   let token: string | null = null;
   if (b.regenerate) {
     token = genToken();

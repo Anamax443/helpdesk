@@ -28,7 +28,8 @@
       actions: "Akce", regen: "Nový token", revoke: "Revokovat", expired: "vypršel", copy: "Kopírovat",
       copied: "Zkopírováno", m1: "1 měsíc", m6: "6 měsíců", m12: "12 měsíců", preset: "rychle",
       projects_nav: "Projekty", new_project: "Nový projekt", project_key: "Klíč", max_depth: "Max. hloubka",
-      visibility_col: "Viditelnost", save: "Uložit" },
+      visibility_col: "Viditelnost", save: "Uložit", revoke_self: "Nelze revokovat vlastní přístup",
+      admin_email: "E-mail admina", permanent: "trvalý 🔒" },
     en: { app: "HelpDesk", login_p: "Enter your company access token", token_ph: "company token",
       connect: "Connect", tickets: "Tickets", new_ticket: "New ticket", logout: "Log out",
       back: "← Back", number: "No.", title: "Title", status: "Status", priority: "Priority",
@@ -47,7 +48,8 @@
       actions: "Actions", regen: "New token", revoke: "Revoke", expired: "expired", copy: "Copy",
       copied: "Copied", m1: "1 month", m6: "6 months", m12: "12 months", preset: "quick",
       projects_nav: "Projects", new_project: "New project", project_key: "Key", max_depth: "Max depth",
-      visibility_col: "Visibility", save: "Save" },
+      visibility_col: "Visibility", save: "Save", revoke_self: "Cannot revoke your own access",
+      admin_email: "Admin email", permanent: "permanent 🔒" },
   };
   const t = (k) => (T[state.lang][k] ?? T.cs[k] ?? k);
 
@@ -153,20 +155,28 @@
     const name = document.getElementById("nc_name").value.trim();
     if (!name) return toast(t("firm_name"), true);
     const exp = document.getElementById("nc_expd").value;
-    const r = await api("/admin/companies", { method: "POST", body: JSON.stringify({ name, expires_at: exp || null }) });
+    const email = document.getElementById("nc_email").value.trim();
+    const r = await api("/admin/companies", { method: "POST", body: JSON.stringify({ name, expires_at: exp || null, recovery_email: email || null }) });
     await showToken(r.token); await loadCompanies(); render();
   }
   async function adminRegen(id) {
-    const exp = document.getElementById("expd_" + id).value;
-    const r = await api("/admin/companies/" + id + "/token", { method: "POST", body: JSON.stringify({ regenerate: true, expires_at: exp || null }) });
+    const expEl = document.getElementById("expd_" + id);
+    const r = await api("/admin/companies/" + id + "/token", { method: "POST", body: JSON.stringify({ regenerate: true, expires_at: expEl ? expEl.value || null : null }) });
+    // Regenerace VLASTNÍHO tokenu: bezešvě přepni session, ať nepřijdeš o přístup.
+    if (r.token && state.me && id === state.me.id) { state.token = r.token; localStorage.setItem("hd_token", r.token); }
     await showToken(r.token); await loadCompanies(); render();
   }
   async function adminExpiry(id) {
-    const exp = document.getElementById("expd_" + id).value;
-    await api("/admin/companies/" + id + "/token", { method: "POST", body: JSON.stringify({ expires_at: exp || null }) });
-    toast(t("expiry")); await loadCompanies(); render();
+    const expEl = document.getElementById("expd_" + id);
+    const emEl = document.getElementById("em_" + id);
+    const body = {};
+    if (emEl) body.recovery_email = emEl.value.trim();
+    if (expEl) body.expires_at = expEl.value || null;
+    await api("/admin/companies/" + id + "/token", { method: "POST", body: JSON.stringify(body) });
+    toast(t("save")); await loadCompanies(); render();
   }
   async function adminRevoke(id) {
+    if (state.me && id === state.me.id) return toast(t("revoke_self"), true);
     await api("/admin/companies/" + id + "/revoke", { method: "POST" });
     toast(t("revoke")); await loadCompanies(); render();
   }
@@ -210,29 +220,31 @@
       <option value="365">${t("m12")}</option></select>`;
     const dateInput = (id, ts) => `<input type="date" id="${id}" value="${ts ? new Date(ts * 1000).toISOString().slice(0, 10) : ""}" title="${t("expiry")}" style="max-width:150px"/>`;
     const rows = state.companies.map((c) => {
-      const exp = !c.token_expires ? t("no_expiry")
-        : (c.token_expires * 1000 < Date.now()
-          ? `<span style="color:var(--crit)">${t("expired")}</span>`
-          : fmtDate(c.token_expires));
+      const expCell = c.is_provider
+        ? `<span class="tag-int" style="color:var(--accent);border-color:var(--accent)">${t("permanent")}</span>`
+        : `${dateInput("expd_" + c.id, c.token_expires)}${presetSel("expd_" + c.id)}`;
       return `<tr>
         <td>${esc(c.name)} ${c.is_provider ? `<span class="tag-int" style="color:var(--accent);border-color:var(--accent)">admin</span>` : ""}</td>
         <td class="mono" data-act="copy" data-tok="${esc(c.token || "")}" title="${t("copy")}" style="cursor:pointer">${esc((c.token || "").slice(0, 10))}…</td>
-        <td>${exp}</td>
+        <td><input id="em_${c.id}" type="email" value="${esc(c.recovery_email || "")}" placeholder="${t("admin_email")}" style="max-width:180px"/></td>
+        <td><div class="rowacts">${expCell}</div></td>
         <td class="num">${c.projects}</td>
-        <td><div class="rowacts">${dateInput("expd_" + c.id, c.token_expires)}${presetSel("expd_" + c.id)}
+        <td><div class="rowacts">
           <button class="btn sm" data-act="setexp" data-id="${esc(c.id)}">${t("apply")}</button>
           <button class="btn sm" data-act="regen" data-id="${esc(c.id)}">${t("regen")}</button>
-          <button class="btn sm" data-act="revoke" data-id="${esc(c.id)}">${t("revoke")}</button></div></td></tr>`;
+          ${c.is_provider ? "" : `<button class="btn sm" data-act="revoke" data-id="${esc(c.id)}">${t("revoke")}</button>`}
+        </div></td></tr>`;
     }).join("");
     return header() + `<main>
       <div class="toolbar"><h1>${t("firms")}</h1></div>
       <div class="card" style="margin-bottom:16px"><div class="toolbar">
-        <input id="nc_name" placeholder="${t("firm_name")}" style="max-width:240px"/>
+        <input id="nc_name" placeholder="${t("firm_name")}" style="max-width:200px"/>
+        <input id="nc_email" type="email" placeholder="${t("admin_email")}" style="max-width:180px"/>
         ${dateInput("nc_expd", null)}${presetSel("nc_expd")}
         <button class="btn primary" data-act="admincreate">+ ${t("new_firm")}</button>
       </div></div>
       <div class="tablewrap"><table><thead><tr>
-        <th>${t("firm_name")}</th><th>${t("token_col")}</th><th>${t("expiry")}</th><th>${t("projects_col")}</th><th>${t("actions")}</th>
+        <th>${t("firm_name")}</th><th>${t("token_col")}</th><th>${t("admin_email")}</th><th>${t("expiry")}</th><th>${t("projects_col")}</th><th>${t("actions")}</th>
       </tr></thead><tbody>${rows}</tbody></table></div></main>`;
   }
   function viewLogin() {

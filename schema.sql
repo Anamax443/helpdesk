@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS company (
   is_provider      INTEGER NOT NULL DEFAULT 0,  -- 1 = maxferit (provider over tenants)
   default_language TEXT NOT NULL DEFAULT 'cs',
   ico              TEXT,                        -- IC (ARES lookup)
+  recovery_email   TEXT,                        -- admin e-mail pro obnovu pristupu (nutny u provider)
   created_at       INTEGER NOT NULL
 );
 
