@@ -1,7 +1,7 @@
 // HelpDesk Worker — jádro v0.1 (verify-core: issue + vláknové zprávy + stavy + e-mail).
 // Rozšíření (Gantt/Kanban/KPI/AI/rozpočet) se nabalují na tuhle kostru.
 
-import { Env, TRANSITIONS, Status } from "./types";
+import { Env, STATUS, TRANSITIONS, Status } from "./types";
 
 export { TicketRoom } from "./do";
 
@@ -74,6 +74,16 @@ async function listTickets(env: Env, company: any, url: URL): Promise<Response> 
     : env.DB.prepare(sql).bind(company.id);
   const { results } = await stmt.all();
   return json({ tickets: results });
+}
+
+async function listProjects(env: Env, company: any): Promise<Response> {
+  const { results } = await env.DB.prepare(
+    `SELECT id, name, manager_id, max_depth, default_visibility FROM project
+     WHERE company_id = ? ORDER BY name`,
+  )
+    .bind(company.id)
+    .all();
+  return json({ projects: results });
 }
 
 async function createTicket(env: Env, company: any, req: Request): Promise<Response> {
@@ -273,6 +283,14 @@ export default {
       if (!company) return json({ error: "neplatný nebo chybějící token firmy" }, 401);
 
       try {
+        if (p === "/api/projects" && req.method === "GET") return await listProjects(env, company);
+        if (p === "/api/meta" && req.method === "GET")
+          return json({
+            statuses: STATUS,
+            transitions: TRANSITIONS,
+            priorities: ["blocking", "critical", "high", "low"],
+            request_types: ["request", "complaint"],
+          });
         if (p === "/api/tickets" && req.method === "GET") return await listTickets(env, company, url);
         if (p === "/api/tickets" && req.method === "POST") return await createTicket(env, company, req);
 

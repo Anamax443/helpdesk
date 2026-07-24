@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HelpDesk — manažerský výstup</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg:#F5F7F9; --surface:#FFFFFF; --surface-2:#FBFCFD;
+    --border:#E3E7EC; --border-strong:#CDD5DD;
+    --text:#1B2430; --muted:#5C6773; --faint:#8A95A1;
+    --accent:#0F766E; --accent-ink:#0B5A54; --accent-soft:#E4F1EF;
+    --ok:#2E7D5B; --ok-soft:#E1F0E8;
+    --warn:#B7791F; --warn-soft:#F6EBD6;
+    --crit:#C0392B; --crit-soft:#F7E2DF;
+    --track:#EAEEF2;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 30px -20px rgba(16,24,32,.22);
+    --radius:10px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0E141B; --surface:#141C25; --surface-2:#111922;
+      --border:#26313D; --border-strong:#32404E;
+      --text:#E7EDF3; --muted:#9AA7B4; --faint:#6E7C89;
+      --accent:#2DD4BF; --accent-ink:#5FE3D2; --accent-soft:#13302C;
+      --ok:#4EC38A; --ok-soft:#12281F;
+      --warn:#E0A64B; --warn-soft:#2A2313;
+      --crit:#EB6A5C; --crit-soft:#2C1917;
+      --track:#1E2833;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 34px -20px rgba(0,0,0,.65);
+    }
+  }
+  :root[data-theme="light"]{
+    color-scheme: light;
+    --bg:#F5F7F9; --surface:#FFFFFF; --surface-2:#FBFCFD;
+    --border:#E3E7EC; --border-strong:#CDD5DD;
+    --text:#1B2430; --muted:#5C6773; --faint:#8A95A1;
+    --accent:#0F766E; --accent-ink:#0B5A54; --accent-soft:#E4F1EF;
+    --ok:#2E7D5B; --ok-soft:#E1F0E8;
+    --warn:#B7791F; --warn-soft:#F6EBD6;
+    --crit:#C0392B; --crit-soft:#F7E2DF;
+    --track:#EAEEF2;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 30px -20px rgba(16,24,32,.22);
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --bg:#0E141B; --surface:#141C25; --surface-2:#111922;
+    --border:#26313D; --border-strong:#32404E;
+    --text:#E7EDF3; --muted:#9AA7B4; --faint:#6E7C89;
+    --accent:#2DD4BF; --accent-ink:#5FE3D2; --accent-soft:#13302C;
+    --ok:#4EC38A; --ok-soft:#12281F;
+    --warn:#E0A64B; --warn-soft:#2A2313;
+    --crit:#EB6A5C; --crit-soft:#2C1917;
+    --track:#1E2833;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 34px -20px rgba(0,0,0,.65);
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+    line-height:1.6; font-size:16px;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  .mono{
+    font-family:"Cascadia Code","Cascadia Mono",ui-monospace,"Segoe UI Mono",Consolas,monospace;
+  }
+  .num{ font-variant-numeric: tabular-nums; font-feature-settings:"tnum" 1; }
+
+  .wrap{max-width:940px; margin:0 auto; padding:44px 22px 72px}
+
+  /* ---------- header ---------- */
+  header.top{
+    position:relative; overflow:hidden;
+    border:1px solid var(--border);
+    background:linear-gradient(180deg,var(--surface),var(--surface-2));
+    border-radius:var(--radius); padding:30px 30px 26px; box-shadow:var(--shadow);
+  }
+  header.top::before{
+    content:""; position:absolute; inset:0 0 auto 0; height:3px;
+    background:linear-gradient(90deg,var(--accent),transparent 72%);
+  }
+  .kicker{
+    margin:0 0 12px; color:var(--accent);
+    font:600 12px/1 "Cascadia Code",ui-monospace,monospace;
+    letter-spacing:.18em; text-transform:uppercase;
+  }
+  h1{margin:0; font-size:30px; line-height:1.14; letter-spacing:-.01em; font-weight:700; text-wrap:balance}
+  .lede{margin:12px 0 0; color:var(--muted); max-width:64ch}
+  .stack{
+    margin-top:20px; padding-top:18px; border-top:1px dashed var(--border-strong);
+    display:flex; flex-wrap:wrap; gap:8px;
+  }
+  .chip{
+    font:600 12px/1 "Cascadia Code",ui-monospace,monospace;
+    padding:6px 10px; border-radius:6px; border:1px solid var(--border-strong);
+    background:var(--surface-2); color:var(--muted); white-space:nowrap;
+  }
+  .chip b{color:var(--text); font-weight:700}
+  .meta{
+    margin-top:16px; display:flex; flex-wrap:wrap; gap:6px 18px;
+    font-size:13px; color:var(--faint);
+  }
+  .meta .dot{color:var(--accent)}
+
+  /* ---------- sections ---------- */
+  section{margin-top:34px}
+  .eyebrow{
+    margin:0 0 12px; color:var(--faint);
+    font:700 12px/1 "Cascadia Code",ui-monospace,monospace;
+    letter-spacing:.15em; text-transform:uppercase;
+    display:flex; align-items:center; gap:12px;
+  }
+  .eyebrow .n{color:var(--accent)}
+  .eyebrow::after{content:""; flex:1; height:1px; background:var(--border)}
+  h2{margin:0 0 12px; font-size:21px; letter-spacing:-.01em; text-wrap:balance}
+  p{margin:0 0 12px; max-width:70ch}
+  .sub{color:var(--muted)}
+
+  .card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:22px 24px; box-shadow:var(--shadow);
+  }
+
+  /* ---------- status pills ---------- */
+  .status-row{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:4px}
+  @media (max-width:680px){ .status-row{grid-template-columns:1fr} }
+  .status{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:16px 18px; box-shadow:var(--shadow);
+    position:relative; overflow:hidden;
+  }
+  .status::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--st-c,var(--accent))}
+  .status .phase{
+    font:700 11px/1 "Cascadia Code",ui-monospace,monospace;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--faint);
+    display:flex; align-items:center; gap:8px;
+  }
+  .status .badge{
+    display:inline-flex; align-items:center; gap:8px; margin-top:12px;
+    font:700 13px/1 "Cascadia Code",ui-monospace,monospace; letter-spacing:.04em;
+    color:var(--st-c); text-transform:uppercase;
+  }
+  .status .desc{margin:8px 0 0; font-size:13.5px; color:var(--muted)}
+  .led{width:9px; height:9px; border-radius:50%; background:var(--st-c); flex:none; box-shadow:0 0 0 3px color-mix(in srgb, var(--st-c) 22%, transparent)}
+  .status.done{--st-c:var(--ok)}
+  .status.prog{--st-c:var(--warn)}
+  .status.prog .led{animation:pulse 1.8s ease-in-out infinite}
+  .check{width:14px;height:14px;flex:none}
+
+  /* ---------- scope grid ---------- */
+  .scope{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:4px}
+  @media (max-width:680px){ .scope{grid-template-columns:1fr} }
+  .scope .card{padding:18px 20px}
+  .scope h3{margin:0 0 12px; font-size:14px; letter-spacing:.02em; display:flex; align-items:center; gap:9px}
+  .tag{
+    font:700 10px/1 "Cascadia Code",ui-monospace,monospace; letter-spacing:.1em;
+    text-transform:uppercase; padding:4px 8px; border-radius:5px;
+  }
+  .tag.parita{background:var(--accent-soft); color:var(--accent-ink)}
+  .tag.plus{background:var(--ok-soft); color:var(--ok)}
+  ul.clean{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:9px}
+  ul.clean li{position:relative; padding-left:20px; font-size:14.5px}
+  ul.clean li::before{
+    content:""; position:absolute; left:2px; top:.62em; width:6px; height:6px;
+    border-radius:2px; background:var(--accent); transform:rotate(45deg);
+  }
+  .scope .plus li::before{background:var(--ok)}
+  ul.clean li b{color:var(--text)}
+
+  /* ---------- KPI dashboard ---------- */
+  .kpi-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap}
+  .sample{
+    font:700 10.5px/1 "Cascadia Code",ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--warn); background:var(--warn-soft); border:1px solid color-mix(in srgb,var(--warn) 34%, transparent);
+    padding:5px 9px; border-radius:6px; white-space:nowrap;
+  }
+  .kpi-grid{
+    display:grid; gap:14px; margin-top:16px;
+    grid-template-columns:repeat(4, minmax(0,1fr));
+  }
+  .kpi-grid .tile{
+    grid-column:span 1; background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:16px 17px; box-shadow:var(--shadow);
+    display:flex; flex-direction:column; min-width:0;
+  }
+  .tile.wide{grid-column:span 2}
+  @media (max-width:820px){ .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))} .tile.wide{grid-column:span 2} }
+  @media (max-width:480px){ .kpi-grid{grid-template-columns:1fr} .tile.wide{grid-column:span 1} }
+  .tile .label{
+    font:700 11px/1.2 "Cascadia Code",ui-monospace,monospace; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--faint);
+  }
+  .tile .big{
+    margin-top:auto; padding-top:12px;
+    font-family:"Cascadia Code",ui-monospace,monospace; font-weight:700;
+    font-size:30px; line-height:1; letter-spacing:-.02em; color:var(--text);
+  }
+  .tile .big small{font-size:15px; color:var(--muted); font-weight:600; letter-spacing:0}
+  .tile .trend{
+    margin-top:8px; font:600 12px/1 "Cascadia Code",ui-monospace,monospace;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .trend.good{color:var(--ok)} .trend.bad{color:var(--crit)} .trend.flat{color:var(--muted)}
+  .spark{margin-top:12px; width:100%; height:38px; display:block}
+  .donut-wrap{display:flex; align-items:center; gap:16px; margin-top:12px}
+  .donut{width:78px; height:78px; flex:none}
+  .donut .center{font:700 18px/1 "Cascadia Code",ui-monospace,monospace; fill:var(--text); font-variant-numeric:tabular-nums}
+  .legend{display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--muted)}
+  .legend b{color:var(--text)}
+  .legend .sw{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:7px; vertical-align:baseline}
+
+  /* grouped bars legend */
+  .barleg{display:flex; gap:16px; margin-top:10px; font-size:12.5px; color:var(--muted)}
+  .barleg span{display:inline-flex; align-items:center; gap:7px}
+  .barleg .sw{width:10px; height:10px; border-radius:2px}
+
+  /* capacity bars */
+  .cap-row{display:flex; align-items:center; gap:12px; margin-top:11px; font-size:13.5px}
+  .cap-row:first-of-type{margin-top:14px}
+  .cap-name{width:104px; flex:none; color:var(--text)}
+  .cap-track{flex:1; height:9px; border-radius:6px; background:var(--track); overflow:hidden; position:relative}
+  .cap-fill{height:100%; border-radius:6px; background:var(--accent); width:var(--w,50%)}
+  .cap-fill.warnf{background:var(--warn)}
+  .cap-fill.critf{background:var(--crit)}
+  .cap-val{width:44px; flex:none; text-align:right; color:var(--muted)}
+  .cap-val .mono{font-size:13px}
+
+  /* ---------- roadmap ---------- */
+  .timeline{margin:6px 0 0; padding:0; list-style:none; position:relative}
+  .timeline::before{content:""; position:absolute; left:11px; top:6px; bottom:6px; width:2px; background:var(--border)}
+  .timeline li{position:relative; padding:0 0 20px 40px}
+  .timeline li:last-child{padding-bottom:0}
+  .timeline .marker{
+    position:absolute; left:0; top:2px; width:24px; height:24px; border-radius:7px;
+    background:var(--surface); border:1px solid var(--border-strong);
+    display:flex; align-items:center; justify-content:center;
+    font:700 12px/1 "Cascadia Code",ui-monospace,monospace; color:var(--muted);
+  }
+  .timeline li.done .marker{background:var(--ok-soft); border-color:var(--ok); color:var(--ok)}
+  .timeline li.next .marker{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-ink)}
+  .tl-title{font-weight:700; font-size:15px; display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .tl-state{
+    font:700 10px/1 "Cascadia Code",ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase;
+    padding:3px 7px; border-radius:5px; border:1px solid var(--border-strong); color:var(--faint); background:var(--surface-2);
+  }
+  .tl-state.done{color:var(--ok); background:var(--ok-soft); border-color:transparent}
+  .tl-state.next{color:var(--accent-ink); background:var(--accent-soft); border-color:transparent}
+  .tl-desc{margin:5px 0 0; font-size:13.5px; color:var(--muted); max-width:64ch}
+
+  /* ---------- risks ---------- */
+  .risks{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:4px}
+  @media (max-width:680px){ .risks{grid-template-columns:1fr} }
+  .risk{
+    background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--r-c,var(--warn));
+    border-radius:var(--radius); padding:15px 18px; box-shadow:var(--shadow);
+  }
+  .risk.info{--r-c:var(--accent)}
+  .risk .rlbl{
+    font:700 11px/1 "Cascadia Code",ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--r-c); display:block; margin-bottom:7px;
+  }
+  .risk p{margin:0; font-size:13.5px; color:var(--muted)}
+  .risk p b{color:var(--text)}
+
+  footer{margin-top:44px; padding-top:16px; border-top:1px solid var(--border); color:var(--faint); font-size:13px}
+  footer .mono{color:var(--muted)}
+
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .reveal{opacity:0; transform:translateY(8px); animation:reveal .5s ease forwards}
+  section:nth-of-type(1) .reveal{animation-delay:.02s}
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important; transition:none !important}
+    .reveal{opacity:1; transform:none}
+    .status.prog .led{animation:none}
+  }
+  @keyframes reveal{to{opacity:1; transform:none}}
+  @media print{
+    body{background:#fff}
+    .card,.status,.tile,.risk,header.top{box-shadow:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ HEADER ============ -->
+  <header class="top">
+    <p class="kicker">HelpDesk · manažerský výstup</p>
+    <h1>Cloudový HelpDesk — vlastní ticket systém s plánováním a AI</h1>
+    <p class="lede">Nahrazuje a rozšiřuje dosavadní NAVERTICA helpdesk vlastním cloudovým řešením:
+      zákaznický helpdesk nad stromovou strukturou práce (epic → úkol → podúkol), doplněný o SLA,
+      plánovač, manažerské KPI, doložitelný audit a přepínatelnou AI vrstvu.</p>
+    <div class="stack">
+      <span class="chip"><b>maxferit.com</b> · Cloudflare</span>
+      <span class="chip"><b>Worker</b> API (TS)</span>
+      <span class="chip"><b>D1</b> data</span>
+      <span class="chip"><b>Durable Object</b> živý stav</span>
+      <span class="chip"><b>R2</b> přílohy</span>
+      <span class="chip"><b>Workers AI</b> + Claude (volitelně)</span>
+      <span class="chip"><b>Multi-tenant</b> · token / firma</span>
+    </div>
+    <div class="meta">
+      <span><span class="dot">◆</span> Verze návrhu v0.1</span>
+      <span>Rozsah v1: plná parita s NAVERTICA</span>
+      <span>Aktualizováno 23.&nbsp;7.&nbsp;2026</span>
+    </div>
+  </header>
+
+  <!-- ============ EXEC SUMMARY ============ -->
+  <section>
+    <p class="eyebrow"><span class="n">01</span> Shrnutí pro vedení</p>
+    <h2>Co to je a jaká je hodnota</h2>
+    <div class="card">
+      <p><b>HelpDesk</b> je cloudová platforma pro příjem a řešení zákaznických požadavků. Přebírá osvědčený
+        model helpdesku NAVERTICA a staví ho na vlastní infrastruktuře, kterou plně vlastníme a rozvíjíme podle
+        svých potřeb — bez licenčních poplatků a závislosti na dodavateli.</p>
+      <p style="margin-bottom:0"><b>Hodnota:</b> tickety, SLA, rozpočet i plánování v jednom nástroji;
+        <b>schvalování rozpočtu po jednotlivých položkách</b> místo „všechno, nebo nic"; <b>manažerské KPI</b>,
+        která NAVERTICA ani JIRA nedávají z krabice; a <b>přepínatelná AI vrstva</b>, která zrychluje třídění
+        a odpovědi, ale nikdy neutrácí sama. Vše s <b>doložitelným auditem</b> pro pozdější certifikovatelnost.</p>
+    </div>
+  </section>
+
+  <!-- ============ STAV PROJEKTU ============ -->
+  <section>
+    <p class="eyebrow"><span class="n">02</span> Stav projektu</p>
+    <h2>Tři fáze — kde právě jsme</h2>
+    <div class="status-row">
+      <div class="status done">
+        <span class="phase">Fáze 1 · Návrh</span>
+        <span class="badge">
+          <svg class="check" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 4.5 6.5 11.5 3 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Kompletní
+        </span>
+        <p class="desc">Architektura zmrazená — datový model (16 tabulek), role, stavový stroj i rozhodnutí jsou uzavřené.</p>
+      </div>
+      <div class="status done">
+        <span class="phase">Fáze 2 · Jádro</span>
+        <span class="badge">
+          <svg class="check" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 4.5 6.5 11.5 3 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Ověřeno
+        </span>
+        <p class="desc">Kostra API běží — zakládání ticketu, vlákna, stavy s validací i audit. Smoke test prošel.</p>
+      </div>
+      <div class="status prog">
+        <span class="phase">Fáze 3 · Nasazení</span>
+        <span class="badge"><span class="led" aria-hidden="true"></span> Probíhá</span>
+        <p class="desc">Zprovoznění na produkci (D1 + R2 + Worker); čeká na CF login a svolení k nasazení.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ROZSAH v1 ============ -->
+  <section>
+    <p class="eyebrow"><span class="n">03</span> Rozsah v1</p>
+    <h2>Parita s NAVERTICA a co přidáváme navíc</h2>
+    <div class="scope">
+      <div class="card">
+        <h3><span class="tag parita">Parita</span> Co umí i NAVERTICA</h3>
+        <ul class="clean">
+          <li><b>Zákaznické tickety</b> s vlákny, přílohami a printscreeny</li>
+          <li><b>Role a viditelnost</b> — interní vs. sdílené, dodavatel vs. zákazník</li>
+          <li><b>Životní cyklus</b> ticketu jedním stavovým strojem</li>
+          <li><b>Nabídky a fakturace</b> navázané na ticket</li>
+          <li><b>Multi-tenant</b> — každá firma vlastní izolovaná data</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="tag plus">Navíc</span> Kde jdeme dál</h3>
+        <ul class="clean plus">
+          <li><b>Schvalování po položkách</b> — zákazník bere/odmítá jednotlivé řádky rozpočtu</li>
+          <li><b>SLA jako first-class</b> — vlastní SLA model per firma, eskalace, breach</li>
+          <li><b>Kanban / Gantt / kapacity týmu</b> — plánování a vytížení řešitelů</li>
+          <li><b>Manažerská KPI</b> — SLA, průtok, backlog, rozpočet, skluzy</li>
+          <li><b>Přepínatelná AI vrstva</b> + <b>Easy mód</b> pro laiky (BFU)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ KPI DASHBOARD ============ -->
+  <section>
+    <p class="eyebrow"><span class="n">04</span> Ukázka manažerských KPI</p>
+    <div class="kpi-head">
+      <h2 style="margin-bottom:0">Náhled dashboardu</h2>
+      <span class="sample" title="Hodnoty jsou ilustrativní, ne z reálného provozu">● Vzorová data</span>
+    </div>
+    <p class="sub" style="margin-top:10px">Agregační vrstva nad tickety, SLA, rozpočtem a auditem — filtrovatelná per firma / projekt / řešitel / období. Následující dlaždice ukazují, jak bude reporting vypadat.</p>
+
+    <div class="kpi-grid">
+
+      <!-- SLA donut -->
+      <div class="tile wide">
+        <span class="label">Plnění SLA</span>
+        <div class="donut-wrap">
+          <svg class="donut" viewBox="0 0 80 80" role="img" aria-label="Plnění SLA 94 procent">
+            <circle cx="40" cy="40" r="30" fill="none" stroke="var(--track)" stroke-width="9"/>
+            <circle cx="40" cy="40" r="30" fill="none" stroke="var(--accent)" stroke-width="9"
+                    stroke-linecap="round" stroke-dasharray="177.2 188.5" stroke-dashoffset="0"
+                    transform="rotate(-90 40 40)"/>
+            <text class="center num" x="40" y="45" text-anchor="middle">94&#37;</text>
+          </svg>
+          <div class="legend">
+            <span><span class="sw" style="background:var(--accent)"></span><b>94&nbsp;%</b> v rámci SLA</span>
+            <span><span class="sw" style="background:var(--track)"></span>6&nbsp;% breach (12&nbsp;ticketů)</span>
+            <span style="color:var(--ok); margin-top:2px" class="mono">▲ +3 p.b. za měsíc</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reakční doba -->
+      <div class="tile">
+        <span class="label">Prům. reakční doba</span>
+        <div class="big num">1,8&nbsp;<small>h</small></div>
+        <span class="trend good mono">▼ z 2,4 h</span>
+        <svg class="spark" viewBox="0 0 120 38" preserveAspectRatio="none" aria-hidden="true">
+          <polyline points="0,6 20,14 40,18 60,23 80,28 100,33 120,33" fill="none"
+                    stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="120" cy="33" r="2.8" fill="var(--ok)"/>
+        </svg>
+      </div>
+
+      <!-- Backlog -->
+      <div class="tile">
+        <span class="label">Backlog</span>
+        <div class="big num">62 <small>otevř.</small></div>
+        <span class="trend good mono">▼ −16 za měsíc</span>
+        <svg class="spark" viewBox="0 0 120 38" preserveAspectRatio="none" aria-hidden="true">
+          <polyline points="0,6 20,12 40,16 60,21 80,27 100,31 120,34" fill="none"
+                    stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="120" cy="34" r="2.8" fill="var(--accent)"/>
+        </svg>
+      </div>
+
+      <!-- Průtok grouped bars -->
+      <div class="tile wide">
+        <span class="label">Průtok — nové vs. uzavřené <span style="color:var(--muted)">(6 týdnů)</span></span>
+        <svg class="spark" style="height:70px" viewBox="0 0 198 66" preserveAspectRatio="none" aria-label="Průtok ticketů: nové proti uzavřeným za 6 týdnů">
+          <line x1="0" y1="58" x2="198" y2="58" stroke="var(--border)" stroke-width="1"/>
+          <!-- W1 -->
+          <rect x="6"  y="14.2" width="11" height="43.8" rx="2" fill="var(--faint)"/>
+          <rect x="19" y="17.3" width="11" height="40.7" rx="2" fill="var(--accent)"/>
+          <!-- W2 -->
+          <rect x="38" y="18.4" width="11" height="39.6" rx="2" fill="var(--faint)"/>
+          <rect x="51" y="15.2" width="11" height="42.8" rx="2" fill="var(--accent)"/>
+          <!-- W3 -->
+          <rect x="70" y="11.1" width="11" height="46.9" rx="2" fill="var(--faint)"/>
+          <rect x="83" y="16.3" width="11" height="41.7" rx="2" fill="var(--accent)"/>
+          <!-- W4 -->
+          <rect x="102" y="19.4" width="11" height="38.6" rx="2" fill="var(--faint)"/>
+          <rect x="115" y="12.1" width="11" height="45.9" rx="2" fill="var(--accent)"/>
+          <!-- W5 -->
+          <rect x="134" y="16.3" width="11" height="41.7" rx="2" fill="var(--faint)"/>
+          <rect x="147" y="15.2" width="11" height="42.8" rx="2" fill="var(--accent)"/>
+          <!-- W6 -->
+          <rect x="166" y="19.4" width="11" height="38.6" rx="2" fill="var(--faint)"/>
+          <rect x="179" y="15.2" width="11" height="42.8" rx="2" fill="var(--accent)"/>
+        </svg>
+        <div class="barleg">
+          <span><span class="sw" style="background:var(--faint)"></span>Nové <b class="mono" style="color:var(--text)">37/týd</b></span>
+          <span><span class="sw" style="background:var(--accent)"></span>Uzavřené <b class="mono" style="color:var(--text)">41/týd</b></span>
+        </div>
+      </div>
+
+      <!-- Vytížení řešitelů -->
+      <div class="tile wide" style="grid-column:span 2">
+        <span class="label">Vytížení řešitelů <span style="color:var(--muted)">(aktivní úkoly / kapacita)</span></span>
+        <div class="cap-row">
+          <span class="cap-name">M. Novák</span>
+          <span class="cap-track"><span class="cap-fill critf" style="--w:92%"></span></span>
+          <span class="cap-val"><span class="mono num">92 %</span></span>
+        </div>
+        <div class="cap-row">
+          <span class="cap-name">J. Svoboda</span>
+          <span class="cap-track"><span class="cap-fill" style="--w:78%"></span></span>
+          <span class="cap-val"><span class="mono num">78 %</span></span>
+        </div>
+        <div class="cap-row">
+          <span class="cap-name">L. Černá</span>
+          <span class="cap-track"><span class="cap-fill" style="--w:71%"></span></span>
+          <span class="cap-val"><span class="mono num">71 %</span></span>
+        </div>
+        <div class="cap-row">
+          <span class="cap-name">P. Dvořák</span>
+          <span class="cap-track"><span class="cap-fill" style="--w:64%"></span></span>
+          <span class="cap-val"><span class="mono num">64 %</span></span>
+        </div>
+        <p class="sub" style="margin:12px 0 0; font-size:12.5px">
+          Průměr týmu <b class="mono num" style="color:var(--text)">76&nbsp;%</b> ·
+          <span style="color:var(--crit)">1 řešitel nad 90&nbsp;% (přetížen)</span>
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ ROADMAPA ============ -->
+  <section>
+    <p class="eyebrow"><span class="n">05</span> Roadmapa</p>
+    <h2>Od jádra k certifikovatelnosti</h2>
+    <div class="card">
+      <ul class="timeline">
+        <li class="done">
+          <span class="marker">✓</span>
+          <div class="tl-title">Jádro ticketů <span class="tl-state done">Hotovo</span></div>
+          <p class="tl-desc">Entita <code class="mono">issue</code> + vláknové zprávy + stavový stroj + audit + živý stav (Durable Object). Ověřeno smoke testem.</p>
+        </li>
+        <li class="next">
+          <span class="marker">2</span>
+          <div class="tl-title">E-mail + AI vrstva <span class="tl-state next">Další krok</span></div>
+          <p class="tl-desc">E-mailové notifikace a přepínatelná AI: automatické třídění (triage), detekce duplicit, návrhy odpovědí a překlad.</p>
+        </li>
+        <li>
+          <span class="marker">3</span>
+          <div class="tl-title">Rozpočet a schvalování <span class="tl-state">Plán</span></div>
+          <p class="tl-desc">Rozpočet po položkách, schvalování/odmítání jednotlivých řádků zákazníkem, kredity a napojení na fakturaci.</p>
+        </li>
+        <li>
+          <span class="marker">4</span>
+          <div class="tl-title">Gantt / Kanban / KPI <span class="tl-state">Plán</span></div>
+          <p class="tl-desc">Interaktivní Gantt s dvousměrnou vazbou, Kanban board, plánování kapacit týmu a manažerská KPI nad snapshoty.</p>
+        </li>
+        <li>
+          <span class="marker">5</span>
+          <div class="tl-title">Certifikovatelnost <span class="tl-state">Později</span></div>
+          <p class="tl-desc">Dokladovatelnost pro ZZVZ / 260/2016 — trezor nabídek, přísné role, anonymita, QTSP. Architektura je na to připravena.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ RIZIKA ============ -->
+  <section>
+    <p class="eyebrow"><span class="n">06</span> Rizika a otevřené body</p>
+    <h2>Na co dát pozor</h2>
+    <div class="risks">
+      <div class="risk">
+        <span class="rlbl">Kapacita</span>
+        <p><b>Vývoj jednoho člověka</b> vedle běžného provozu. Řízeno prioritizací: nejdřív jádro + e-mail + AI, plánovací nadstavba (Gantt/KPI) až potom.</p>
+      </div>
+      <div class="risk">
+        <span class="rlbl">Certifikace ZZVZ</span>
+        <p><b>Až v pozdější fázi.</b> V1 na certifikaci jen <b>připravuje</b> (audit, oddělené role); plná dokladovatelnost přijde s certifikační vrstvou.</p>
+      </div>
+      <div class="risk info">
+        <span class="rlbl">Nasazení</span>
+        <p>Produkční zprovoznění <b>čeká na CF login a svolení</b>. Do té doby běží lokálně; smoke test jádra prošel.</p>
+      </div>
+      <div class="risk info">
+        <span class="rlbl">Náklady na AI</span>
+        <p>Default je <b>bezplatná Workers AI</b>. Placený Claude jen když je explicitně zapnutý — <b>systém nikdy neutrácí sám</b>.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    HelpDesk · <span class="mono">D:\git\helpdesk</span> · maxferit.com. Manažerský výstup shrnuje živý návrhový dokument;
+    zdroj pravdy pro architekturu zůstává <span class="mono">HANDOFF.md</span> a návrhový artefakt.
+    Ilustrativní KPI slouží jen k náhledu formátu reportingu.
+  </footer>
+
+</div>
+</body>
+</html>

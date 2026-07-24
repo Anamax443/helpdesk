@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HelpDesk — cloudový helpdesk na maxferit.com</title>
+<style>
+  :root{
+    --bg:#F5F7F9; --surface:#FFFFFF; --surface-2:#FBFCFD;
+    --border:#E3E7EC; --border-strong:#CDD5DD;
+    --text:#1B2430; --muted:#5C6773; --faint:#8A95A1;
+    --accent:#0F766E; --accent-ink:#0B5A54; --accent-soft:#E4F1EF;
+    --ok:#2E7D5B; --warn:#B7791F; --crit:#C0392B;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 18px 48px -30px rgba(16,24,32,.30);
+    --radius:10px;
+    --font: "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+    --mono: "Cascadia Code","Cascadia Mono",ui-monospace,"Segoe UI Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0E141B; --surface:#141C25; --surface-2:#111922;
+      --border:#26313D; --border-strong:#32404E;
+      --text:#E7EDF3; --muted:#9AA7B4; --faint:#6E7C89;
+      --accent:#2DD4BF; --accent-ink:#5FE3D2; --accent-soft:#13302C;
+      --ok:#4EC38A; --warn:#E0A64B; --crit:#EB6A5C;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 22px 60px -34px rgba(0,0,0,.75);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#F5F7F9; --surface:#FFFFFF; --surface-2:#FBFCFD;
+    --border:#E3E7EC; --border-strong:#CDD5DD;
+    --text:#1B2430; --muted:#5C6773; --faint:#8A95A1;
+    --accent:#0F766E; --accent-ink:#0B5A54; --accent-soft:#E4F1EF;
+    --ok:#2E7D5B; --warn:#B7791F; --crit:#C0392B;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 18px 48px -30px rgba(16,24,32,.30);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0E141B; --surface:#141C25; --surface-2:#111922;
+    --border:#26313D; --border-strong:#32404E;
+    --text:#E7EDF3; --muted:#9AA7B4; --faint:#6E7C89;
+    --accent:#2DD4BF; --accent-ink:#5FE3D2; --accent-soft:#13302C;
+    --ok:#4EC38A; --warn:#E0A64B; --crit:#EB6A5C;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 22px 60px -34px rgba(0,0,0,.75);
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:var(--font); line-height:1.55; font-size:17px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:var(--mono)}
+
+  /* ---------- deck / scroll-snap ---------- */
+  .deck{
+    height:100vh; height:100dvh; overflow-y:scroll;
+    scroll-snap-type:y mandatory; scroll-behavior:smooth;
+    scrollbar-width:none;
+  }
+  .deck::-webkit-scrollbar{display:none}
+
+  .slide{
+    min-height:100vh; min-height:100dvh; width:100%;
+    scroll-snap-align:start; scroll-snap-stop:always;
+    display:flex; align-items:center; justify-content:center;
+    padding:64px 40px 96px;
+    position:relative;
+  }
+  .slide-inner{
+    width:100%; max-width:1040px; margin:0 auto;
+    animation:rise .5s cubic-bezier(.2,.7,.2,1) both;
+  }
+  @keyframes rise{from{opacity:0; transform:translateY(16px)} to{opacity:1; transform:none}}
+
+  /* subtle accent bar on top of each content slide */
+  .slide::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:3px;
+    background:linear-gradient(90deg,var(--accent),transparent 62%);
+    opacity:.9;
+  }
+  .slide.title::before{height:4px}
+
+  .eyebrow{
+    font:700 12px/1 var(--mono); letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent); display:flex; align-items:center; gap:12px; margin:0 0 18px;
+  }
+  .eyebrow .num{
+    display:inline-grid; place-items:center; min-width:26px; height:26px; padding:0 7px;
+    border-radius:7px; background:var(--accent-soft); color:var(--accent-ink);
+    border:1px solid var(--border-strong);
+  }
+  .eyebrow::after{content:""; flex:1; height:1px; background:var(--border)}
+
+  h1{margin:0; font-size:clamp(34px,6vw,60px); line-height:1.05; letter-spacing:-.02em; font-weight:800; text-wrap:balance}
+  h2{margin:0 0 8px; font-size:clamp(24px,3.4vw,34px); line-height:1.12; letter-spacing:-.01em; text-wrap:balance; font-weight:750}
+  h3{margin:0 0 6px; font-size:16px; letter-spacing:.01em; font-weight:700}
+  p{margin:0 0 14px; max-width:70ch}
+  .lede{color:var(--muted); font-size:clamp(17px,2vw,21px); max-width:66ch}
+  .sub{color:var(--muted)}
+
+  code, .tag{
+    font-family:var(--mono); font-size:.82em;
+    background:var(--accent-soft); color:var(--accent-ink);
+    padding:2px 7px; border-radius:6px; border:1px solid var(--border);
+  }
+
+  .cards{display:grid; gap:16px}
+  .cols-2{grid-template-columns:1fr 1fr}
+  .cols-3{grid-template-columns:repeat(3,1fr)}
+  @media (max-width:800px){ .cols-2,.cols-3{grid-template-columns:1fr} }
+
+  .card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow);
+  }
+  .card.top-accent{border-top:3px solid var(--accent)}
+  .card.top-ok{border-top:3px solid var(--ok)}
+  .card.top-crit{border-top:3px solid var(--crit)}
+  .card .cap{font:700 11px/1 var(--mono); letter-spacing:.13em; text-transform:uppercase; color:var(--faint); display:block; margin-bottom:12px}
+  .card .cap.ok{color:var(--ok)} .card .cap.accent{color:var(--accent)} .card .cap.crit{color:var(--crit)}
+
+  ul.clean{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:11px}
+  ul.clean li{padding-left:22px; position:relative; font-size:15.5px; line-height:1.5; color:var(--muted)}
+  ul.clean li::before{content:""; position:absolute; left:2px; top:.62em; width:7px; height:7px; border-radius:2px; background:var(--accent); transform:rotate(45deg)}
+  ul.clean li b{color:var(--text); font-weight:650}
+  ul.clean.ok li::before{background:var(--ok)}
+  ul.clean.crit li::before{background:var(--crit)}
+
+  .chips{display:flex; flex-wrap:wrap; gap:9px; margin-top:26px}
+  .chip{
+    font:600 13px/1 var(--mono); padding:8px 12px; border-radius:8px;
+    border:1px solid var(--border-strong); background:var(--surface); color:var(--muted); box-shadow:var(--shadow);
+  }
+  .chip b{color:var(--text); font-weight:700}
+
+  .meta{margin-top:28px; display:flex; flex-wrap:wrap; gap:8px 22px; font:600 13px/1.4 var(--mono); color:var(--faint)}
+  .meta .dot{color:var(--accent)}
+
+  /* hierarchy flow */
+  .flow{display:flex; flex-wrap:wrap; align-items:stretch; gap:10px; margin-top:6px}
+  .node{
+    flex:1 1 150px; min-width:140px; background:var(--surface); border:1px solid var(--border);
+    border-left:3px solid var(--accent); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow);
+  }
+  .node .lvl{font:700 11px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--accent); display:block; margin-bottom:7px}
+  .node .nm{font-weight:750; font-size:16px}
+  .node .ds{font-size:13px; color:var(--muted); margin-top:4px; line-height:1.4}
+  .arrow{align-self:center; color:var(--faint); font-family:var(--mono); font-size:20px; font-weight:700}
+  @media (max-width:800px){ .arrow{transform:rotate(90deg)} .node{flex-basis:100%} }
+
+  /* pipeline / architecture */
+  .stack{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-top:6px}
+  .layer{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; box-shadow:var(--shadow)}
+  .layer .svc{font:700 14px/1 var(--mono); color:var(--accent-ink); display:block; margin-bottom:6px}
+  .layer .role{font-size:13.5px; color:var(--muted); line-height:1.45}
+
+  .badge{display:inline-flex; align-items:center; gap:7px; font:700 12px/1 var(--mono); letter-spacing:.04em;
+    padding:7px 12px; border-radius:20px; border:1px solid var(--border-strong); background:var(--surface); color:var(--text); box-shadow:var(--shadow)}
+  .badge.ok{color:var(--ok); border-color:color-mix(in srgb,var(--ok) 40%,var(--border-strong))}
+  .badge .d{width:8px; height:8px; border-radius:50%; background:currentColor}
+
+  .prio{display:flex; flex-wrap:wrap; gap:8px; margin-top:4px}
+  .prio span{font:700 12px/1 var(--mono); padding:6px 10px; border-radius:6px; border:1px solid var(--border-strong)}
+  .prio .b{color:#fff; background:var(--crit); border-color:transparent}
+  .prio .c{color:var(--crit); background:var(--accent-soft)}
+  .prio .h{color:var(--warn)}
+  .prio .l{color:var(--muted)}
+
+  /* ---------- chrome: nav + progress ---------- */
+  .hud{
+    position:fixed; z-index:40; right:22px; bottom:20px;
+    display:flex; align-items:center; gap:10px;
+    background:var(--surface); border:1px solid var(--border-strong);
+    border-radius:999px; padding:7px 9px; box-shadow:var(--shadow);
+  }
+  .hud button{
+    appearance:none; width:38px; height:38px; border-radius:50%;
+    border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text);
+    font-size:17px; cursor:pointer; display:grid; place-items:center;
+    transition:background .15s ease, color .15s ease, transform .1s ease;
+  }
+  .hud button:hover:not(:disabled){background:var(--accent); color:#fff; border-color:transparent}
+  .hud button:active:not(:disabled){transform:scale(.92)}
+  .hud button:disabled{opacity:.35; cursor:default}
+  .hud .count{font:700 13px/1 var(--mono); color:var(--muted); min-width:56px; text-align:center; letter-spacing:.05em}
+  .hud .count b{color:var(--accent-ink)}
+
+  .progress{position:fixed; top:0; left:0; height:3px; z-index:41; background:var(--accent); width:0; transition:width .25s ease}
+
+  .dots{position:fixed; z-index:40; left:20px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:11px}
+  .dots a{width:9px; height:9px; border-radius:50%; border:1px solid var(--border-strong); background:transparent; display:block; transition:background .2s ease, transform .2s ease}
+  .dots a.on{background:var(--accent); border-color:transparent; transform:scale(1.35)}
+  .dots a:hover{background:var(--accent-ink)}
+  @media (max-width:720px){ .dots{display:none} }
+
+  .hint{position:fixed; z-index:40; left:22px; bottom:22px; font:600 12px/1 var(--mono); color:var(--faint); display:flex; align-items:center; gap:8px}
+  .hint kbd{font-family:var(--mono); font-size:11px; padding:3px 6px; border:1px solid var(--border-strong); border-bottom-width:2px; border-radius:5px; background:var(--surface); color:var(--muted)}
+  @media (max-width:720px){ .hint{display:none} }
+
+  a{color:var(--accent-ink)}
+  a:focus-visible, button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+  @media (prefers-reduced-motion: reduce){
+    html, .deck{scroll-behavior:auto}
+    .slide-inner{animation:none}
+    .progress{transition:none}
+    .hud button{transition:none}
+  }
+  @media (max-width:560px){
+    .slide{padding:56px 20px 92px}
+    body{font-size:16px}
+  }
+</style>
+</head>
+<body>
+
+<div class="progress" id="bar"></div>
+
+<nav class="dots" id="dots" aria-label="Přechod na slide"></nav>
+
+<main class="deck" id="deck">
+
+  <!-- 1 · Titulní -->
+  <section class="slide title" id="s1" aria-label="Titulní slide">
+    <div class="slide-inner">
+      <p class="eyebrow"><span class="num">01</span> Návrh · living document</p>
+      <h1>HelpDesk</h1>
+      <p class="lede" style="margin-top:18px">Cloudový ticket / helpdesk systém běžící na <b class="mono" style="color:var(--text)">maxferit.com</b> — zákaznický helpdesk (model NAVERTICA) postavený nad stromovou strukturou práce (model JIRA), s plánovačem, manažerskými KPI a doložitelným auditem.</p>
+      <div class="chips">
+        <span class="chip"><b>helpdesk.maxferit.com</b> · Cloudflare</span>
+        <span class="chip"><b>100 % edge</b></span>
+        <span class="chip"><b>Multi-tenant</b> · token / firma</span>
+        <span class="chip"><b>Přepínatelná AI</b></span>
+      </div>
+      <div class="meta">
+        <span><span class="dot">&#9670;</span> v0.1 · jádro ověřeno naživo</span>
+        <span>Rozsah v1: plná parita s NAVERTICA</span>
+        <span>Anamax443 · D:\git\helpdesk</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · Problém -->
+  <section class="slide" id="s2" aria-label="Problém">
+    <div class="slide-inner">
+      <p class="eyebrow"><span class="num">02</span> Problém</p>
+      <h2>Ani jeden ze zavedených nástrojů to neumí celé</h2>
+      <p class="sub" style="margin-bottom:22px; max-width:64ch">Dnešní provoz stojí na dvou světech, které se nepotkávají — helpdesk bez plánování a plánovač bez helpdesku.</p>
+      <div class="cards cols-2">
+        <div class="card top-crit">
+          <span class="cap crit">NAVERTICA — helpdesk, ale rigidní</span>
+          <ul class="clean crit">
+            <li><b>All-or-nothing schvalování</b> — nabídku bereš celou, nebo vůbec; nejde odsouhlasit jednotlivé položky.</li>
+            <li><b>Roztříštěné notifikace</b> — odběr, přístup a viditelnost splývají do jednoho a nedají se rozumně řídit.</li>
+            <li><b>Žádné SLA</b> — chybí reakční / řešící lhůty, eskalace a měření breach.</li>
+            <li><b>Žádný board</b> — není Kanban ani Gantt, žádný přehled toku práce.</li>
+          </ul>
+        </div>
+        <div class="card top-crit">
+          <span class="cap crit">JIRA — strom práce, ale ne helpdesk</span>
+          <ul class="clean crit">
+            <li><b>Není helpdesk</b> — chybí zákaznická brána, vláknová komunikace se stranou zákazníka a interní/sdílená viditelnost.</li>
+            <li><b>Žádná obchodní vrstva</b> — nezná nabídky, rozpočet po položkách, schvalování ani fakturační stav.</li>
+            <li>Zaměřeno na interní vývoj, ne na vztah dodavatel &#8596; zákazník.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · Řešení -->
+  <section class="slide" id="s3" aria-label="Řešení">
+    <div class="slide-inner">
+      <p class="eyebrow"><span class="num">03</span> Řešení</p>
+      <h2>Hybrid: zákaznický helpdesk nad stromem práce</h2>
+      <p class="sub" style="margin-bottom:22px; max-width:66ch">Vezmeme silné stránky obou a slepíme je do jednoho systému — helpdeskovou bránu z NAVERTICA položíme na WBS strom z JIRA a přidáme, co chybí oběma.</p>
+      <div class="cards cols-3">
+        <div class="card top-accent">
+          <span class="cap accent">Zvenčí · zákazník</span>
+          <h3>Helpdesk (NAVERTICA)</h3>
+          <ul class="clean">
+            <li>Zakládání ticketů, vláknová komunikace</li>
+            <li>Interní vs. sdílená viditelnost dle domény</li>
+            <li>Nabídky a rozpočet po položkách</li>
+          </ul>
+        </div>
+        <div class="card top-accent">
+          <span class="cap accent">Uvnitř · tým</span>
+          <h3>Strom práce (JIRA)</h3>
+          <ul class="clean">
+            <li>Rozpad na epiky, úkoly a podúkoly</li>
+            <li>Jedna entita <code>issue</code> = WBS pro Gantt</li>
+            <li>Přiřazení řešitelům, stavy, závislosti</li>
+          </ul>
+        </div>
+        <div class="card top-accent">
+          <span class="cap accent">Navíc · nad oběma</span>
+          <h3>Co chybí oběma</h3>
+          <ul class="clean">
+            <li>SLA model, Kanban i Gantt, kapacity</li>
+            <li>Manažerské KPI a doložitelný audit</li>
+            <li>Přepínatelná AI vrstva</li>
+          </ul>
+        </div>
+      </div>
+      <p class="sub mono" style="margin-top:22px; font-size:13.5px; color:var(--faint)">Jedno místo pravdy · jedna entita <code>issue</code> se self-reference <code>parent_id</code> · scoped role · append-only audit.</p>
+    </div>
+  </section>
+
+  <!-- 4 · Hierarchie -->
+  <section class="slide" id="s4" aria-label="Hierarchie">
+    <div class="slide-inner">
+      <p class="eyebrow"><span class="num">04</span> Hierarchie</p>
+      <h2>Firma &#8594; Projekt &#8594; Epic &#8594; Úkol &#8594; Podúkol<sup>N</sup></h2>
+      <p class="sub" style="margin-bottom:22px; max-width:68ch">Datově je to <b>jedna entita <code>issue</code></b> se self-reference <code>parent_id</code> a typem. Rozpad = <b>WBS</b>, kterou přímo použije Gantt. Úkol je vždy pod projektem; epic je volitelná vrstva, přiřaditelná i zpětně.</p>
+      <div class="flow">
+        <div class="node"><span class="lvl">Firma</span><span class="nm">Zákazník</span><div class="ds">token · SLA model · admin · izolace dat</div></div>
+        <div class="arrow">&#8594;</div>
+        <div class="node"><span class="lvl">Projekt</span><span class="nm">Manažer</span><div class="ds">role · viditelnost · max. hloubka rozpadu</div></div>
+        <div class="arrow">&#8594;</div>
+        <div class="node"><span class="lvl">Epic</span><span class="nm">Volitelný</span><div class="ds">sdružuje úkoly · roll-up rozpočtu i datumů</div></div>
+        <div class="arrow">&#8594;</div>
+        <div class="node"><span class="lvl">Úkol</span><span class="nm">Ticket</span><div class="ds">SLA · rozpočet · vlákna · přílohy</div></div>
+        <div class="arrow">&#8594;</div>
+        <div class="node"><span class="lvl">Podúkol&#8319;</span><span class="nm">Rekurze</span><div class="ds">dělení do konfigurovatelné hloubky</div></div>
+      </div>
+      <p class="sub" style="margin-top:22px; max-width:70ch"><b style="color:var(--text)">Umístění:</b> úkol vždy pod projektem (povinné), epic volitelný — existující úkol lze kdykoli zařadit pod epic nebo osamostatnit. Reparenting přepočítá hloubku i roll-up a zapíše se do auditu.</p>
+    </div>
+  </section>
+
+  <!-- 5 · Klíčové funkce -->
+  <section class="slide" id="s5" aria-label="Klíčové funkce">
+    <div class="slide-inner">
+      <p class="eyebrow"><span class="num">05</span> Klíčové funkce</p>
+      <h2>Co systém umí</h2>
+      <div class="cards cols-3" style="margin-top:6px">
+        <div class="card">
+          <span class="cap accent">SLA &amp; priorita</span>
+          <ul class="clean">
+            <li><b>SLA model per firma</b> — matice priority &#8594; reakční doba + doba řešení + provozní kalendář / TZ.</li>
+            <li><b>Priorita</b> z importance &#215; urgency nebo <b>AI triage</b> z textu (člověk potvrdí):</li>
+          </ul>
+          <div class="prio"><span class="b">blokační</span><span class="c">kritická</span><span class="h">vysoká</span><span class="l">nízká</span></div>
+        </div>
+        <div class="card">
+          <span class="cap accent">Plánovač</span>
+          <ul class="clean">
+            <li><b>Kanban</b> — sloupce = stavy, drag karty = validovaný přechod, WIP limity, swimlanes.</li>
+            <li><b>Dvousměrný Gantt</b> — tažení pruhu i editace píší totéž pole, živě přes Durable Object.</li>
+            <li><b>Plánování kapacit</b> — vytížení vs. kapacita týmu s indikátorem přetížení.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="cap accent">Řízení &amp; AI</span>
+          <ul class="clean">
+            <li><b>Manažerské KPI</b> — SLA plnění, průtok, aging, vytížení, rozpočet, plnění plánu.</li>
+            <li><b>Easy / Extended</b> mód zakládání — popiš problém vs. plný formulář.</li>
+            <li><b>Přepínatelná AI</b> — free Workers AI / placený Claude / off.</li>
+            <li><b>Doložitelný audit</b> — append-only log před &#8594; po.</li>
+          </ul>
+        </div>
+      </div>
+      <p class="sub mono" style="margin-top:20px; font-size:13.5px; color:var(--faint)">AI navrhuje, člověk potvrzuje — nic se neaplikuje samo; každý návrh i jeho přijetí jde do <code>audit_log</code>.</p>
+    </div>
+  </section>
+
+  <!-- 6 · Architektura -->
+  <section class="slide" id="s6" aria-label="Architektura">
+    <div class="slide-inner">
+      <p class="eyebrow"><span class="num">06</span> Architektura</p>
+      <h2>100 % edge na Cloudflare</h2>
+      <p class="sub" style="margin-bottom:22px; max-width:66ch">Bez vlastního serveru, bez správy VM — data i běh přímo na edge. Stejný stack a vzory jako u ostatních projektů (ITDashboard, JobWatch, FIO-import).</p>
+      <div class="stack">
+        <div class="layer"><span class="svc">Workers (TS)</span><span class="role">API a business logika na edge, blízko uživateli</span></div>
+        <div class="layer"><span class="svc">D1</span><span class="role">Relační data — <code>issue</code> strom, role, zprávy, rozpočet, audit</span></div>
+        <div class="layer"><span class="svc">Durable Objects</span><span class="role">Živý stav — Kanban i Gantt v reálném čase, koordinace</span></div>
+        <div class="layer"><span class="svc">R2</span><span class="role">Přílohy — drag &amp; drop, procházení, Ctrl+V printscreenu</span></div>
+        <div class="layer"><span class="svc">Workers AI + Vectorize</span><span class="role">Triage, podobné tickety / duplicity, překlad CS &#8596; EN</span></div>
+      </div>
+      <div class="cards cols-2" style="margin-top:16px">
+        <div class="card top-ok">
+          <span class="cap ok">Zdarma · běží vždy</span>
+          <h3>Cloudflare Workers AI</h3>
+          <ul class="clean ok">
+            <li>Triage — návrh řady, oblasti a priority</li>
+            <li>Podobné tickety / duplicity (embeddings + Vectorize)</li>
+            <li>Překlad CS &#8596; EN</li>
+          </ul>
+        </div>
+        <div class="card top-accent">
+          <span class="cap accent">Placené · jen když zapnuto</span>
+          <h3>Claude (Anthropic)</h3>
+          <ul class="clean">
+            <li>Návrh odpovědi / řešení řešiteli</li>
+            <li>Souhrn dlouhého vlákna při převzetí</li>
+            <li>Návrh rozpočtu / odhad pracnosti</li>
+          </ul>
+        </div>
+      </div>
+      <p class="sub mono" style="margin-top:18px; font-size:13.5px; color:var(--faint)"><code>AI_PROVIDER</code> = <code>workers-ai</code> (default, zdarma) | <code>claude</code> (placené) | <code>off</code> — systém nikdy neutrácí sám.</p>
+    </div>
+  </section>
+
+  <!-- 7 · Stav -->
+  <section class="slide" id="s7" aria-label="Stav">
+    <div class="slide-inner">
+      <p class="eyebrow"><span class="num">07</span> Stav</p>
+      <h2>Jádro ověřeno naživo</h2>
+      <p class="sub" style="margin-bottom:22px; max-width:66ch">Nejdřív ověřit jádro funkce, pak stavět okolo — smoke test jádra prošel, kód je v gitu a připravený na nasazení.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px">
+        <span class="badge ok"><span class="d"></span> Smoke test prošel</span>
+        <span class="badge ok"><span class="d"></span> Commity v gitu</span>
+        <span class="badge"><span class="d" style="background:var(--accent)"></span> helpdesk.maxferit.com</span>
+      </div>
+      <div class="cards cols-3">
+        <div class="card top-ok">
+          <span class="cap ok">Ověřeno naživo</span>
+          <ul class="clean ok">
+            <li><b>create</b> — založení ticketu</li>
+            <li><b>message</b> — vláknová zpráva</li>
+            <li><b>status</b> — přechod stavu</li>
+            <li><b>guardy</b> — kontrola oprávnění a přechodů</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="cap accent">Kde to je</span>
+          <ul class="clean">
+            <li>Repozitář <code>Anamax443/helpdesk</code></li>
+            <li>Lokálně <code>D:\git\helpdesk</code></li>
+            <li>Nasazení na <b>helpdesk.maxferit.com</b></li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="cap accent">Další krok</span>
+          <ul class="clean">
+            <li>DDL pro D1 + kostra Workeru</li>
+            <li>Vláknové zprávy, stavy, e-mail</li>
+            <li>Postupně k plné paritě s NAVERTICA</li>
+          </ul>
+        </div>
+      </div>
+      <p class="sub mono" style="margin-top:22px; font-size:13.5px; color:var(--faint)">Living document — aktualizuje se, jak přibývají požadavky. Stavíme na zmrazeném schématu z návrhu.</p>
+    </div>
+  </section>
+
+</main>
+
+<!-- HUD -->
+<div class="hud" role="group" aria-label="Navigace prezentací">
+  <button id="prev" aria-label="Předchozí slide" title="Předchozí (&#8592; / PageUp)">&#8592;</button>
+  <span class="count" id="count"><b>1</b>&#8202;/&#8202;7</span>
+  <button id="next" aria-label="Další slide" title="Další (&#8594; / PageDown)">&#8594;</button>
+</div>
+
+<div class="hint"><kbd>&#8592;</kbd><kbd>&#8594;</kbd> nebo <kbd>PgUp</kbd><kbd>PgDn</kbd> · šipky mezi slidy</div>
+
+<script>
+(function(){
+  "use strict";
+  var deck = document.getElementById("deck");
+  var slides = Array.prototype.slice.call(deck.querySelectorAll(".slide"));
+  var total = slides.length;
+  var bar = document.getElementById("bar");
+  var count = document.getElementById("count");
+  var prev = document.getElementById("prev");
+  var next = document.getElementById("next");
+  var dotsWrap = document.getElementById("dots");
+  var current = 0;
+
+  // build dots
+  slides.forEach(function(s, i){
+    var a = document.createElement("a");
+    a.href = "#" + s.id;
+    a.setAttribute("aria-label", "Slide " + (i+1));
+    a.addEventListener("click", function(e){ e.preventDefault(); go(i); });
+    dotsWrap.appendChild(a);
+  });
+  var dots = Array.prototype.slice.call(dotsWrap.children);
+
+  function render(){
+    count.innerHTML = "<b>" + (current+1) + "</b> / " + total;
+    bar.style.width = (total > 1 ? (current/(total-1))*100 : 100) + "%";
+    prev.disabled = current === 0;
+    next.disabled = current === total-1;
+    dots.forEach(function(d, i){ d.classList.toggle("on", i === current); });
+  }
+
+  function go(i){
+    i = Math.max(0, Math.min(total-1, i));
+    current = i;
+    slides[i].scrollIntoView({ block:"start" });
+    render();
+  }
+
+  prev.addEventListener("click", function(){ go(current-1); });
+  next.addEventListener("click", function(){ go(current+1); });
+
+  // keyboard
+  document.addEventListener("keydown", function(e){
+    if (e.defaultPrevented) return;
+    var k = e.key;
+    if (k === "ArrowRight" || k === "ArrowDown" || k === "PageDown" || k === " " || k === "Spacebar"){
+      e.preventDefault(); go(current+1);
+    } else if (k === "ArrowLeft" || k === "ArrowUp" || k === "PageUp"){
+      e.preventDefault(); go(current-1);
+    } else if (k === "Home"){
+      e.preventDefault(); go(0);
+    } else if (k === "End"){
+      e.preventDefault(); go(total-1);
+    }
+  });
+
+  // keep indicator in sync with manual scroll / wheel / swipe
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (en.isIntersecting && en.intersectionRatio >= 0.55){
+        var idx = slides.indexOf(en.target);
+        if (idx !== -1 && idx !== current){ current = idx; render(); }
+      }
+    });
+  }, { root: deck, threshold: [0.55] });
+  slides.forEach(function(s){ io.observe(s); });
+
+  render();
+})();
+</script>
+
+</body>
+</html>

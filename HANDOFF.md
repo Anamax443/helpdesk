@@ -13,7 +13,18 @@ https://claude.ai/code/artifact/efc9654c-c8f4-45e4-b7de-325fc11e6365
 - **Durable Object `TicketRoom`** — živý stav vlákna + dvousměrný Gantt (WebSocket)
 - **R2 `helpdesk-attachments`** — přílohy + printscreeny
 - **Workers AI** (+ Vectorize) — free AI vrstva; Claude volitelně (placené)
-- Repo: `D:\git\helpdesk` (Anamax443, zatím bez remote). Commit identita: Milan Trnka <info@maxferit.cz>.
+- Repo: `Anamax443/helpdesk` (public). Commit identita: Milan Trnka <info@maxferit.cz>.
+
+## Struktura
+```
+schema.sql            D1 model (16 tabulek)
+src/index.ts          Worker: router + API (health, projects, meta, tickets, messages, status)
+src/types.ts          Env + stavy + povolené přechody
+src/token.ts          HMAC pozvánkové tokeny
+src/do.ts             TicketRoom Durable Object (živý kanál)
+public/               SPA (index.html, app.css, app.js) — login tokenem, seznam, Easy/Extended, detail
+docs/                 prezentace.html, manazersky-vystup.html, STATUS(.en).md
+```
 
 ## Zmrazená rozhodnutí (v0.1)
 1. Gantt v1 = interaktivní osa s dvousměrnou vazbou (závislosti + kritická cesta = vrstva 2)
@@ -22,34 +33,40 @@ https://claude.ai/code/artifact/efc9654c-c8f4-45e4-b7de-325fc11e6365
 4. maxferit = **provozovatel nad tenanty** (řešitelé vidí napříč zákazníky)
 5. AI v1 = jen nad interními daty (web_search později)
 - Interní viditelnost = admin-autorizace ke straně/doméně (pole `party`), ne pouhá shoda domény
-- **Schvalování neblokuje práci** — interní pokyny běží bez schválení; approval workflow se aktivuje
-  jen když je potřeba (billable / práh / podpis zákazníka). `issue.billable` + `issue.approval_state`.
+- **Schvalování neblokuje práci** — interní pokyny bez schválení; approval workflow jen když
+  billable / práh / podpis zákazníka. `issue.billable` + `issue.approval_state`.
 
 ## Stav
 - [x] `schema.sql` — kompletní zmrazený model (16 tabulek)
-- [x] Kostra Workeru: health, list/create/get ticketu, add message, změna stavu (validace přechodů), audit, DO
-- [ ] `npm install`, vytvoření D1/R2, deploy — **zatím neproběhlo** (potřebuje CF login + svolení)
-- [ ] AI vrstva (`src/ai.ts`), rozpočet, Gantt/Kanban/KPI, pozvánky, e-mail notifikace (teď stub)
+- [x] Worker jádro: health, projects, meta, list/create/get ticketu, zprávy, změna stavu (validace přechodů), audit, DO
+- [x] **Frontend SPA** — login tokenem, seznam, Easy/Extended zakládání, detail + vlákna + přechody, i18n CS/EN
+- [x] **Verify-core** — `tsc` 0 chyb + lokální `wrangler dev` smoke test prošel (create/message/status + guardy 400/401)
+- [x] Dokumentace CS+EN, prezentace, manažerský výstup
+- [ ] Produkční nasazení (D1/R2 remote + deploy) — viz níže
+- [ ] Další moduly: AI vrstva (`src/ai.ts`), rozpočet/schvalování, Gantt/Kanban/KPI, pozvánky, e-mail (teď stub)
+
+## Backlog — provider-admin konzole (tokeny firem)
+Admin (maxferit) spravuje **tokeny jednotlivých firem s expirací per token** (vydávání, revokace,
+platnost). Dnes schéma drží `company.token` + `company.token_expires`; plná konzole (registr tokenů,
+MFA, logování přístupů) = samostatný admin modul — viz návrh sekce Multi-tenant.
 
 ## Zprovoznění (lokálně)
 ```powershell
 npm install
-Copy-Item .dev.vars.example .dev.vars   # doplnit INVITE_SECRET
-wrangler d1 create helpdesk-db          # database_id → wrangler.jsonc
-npm run db:init                         # aplikuje schema.sql lokálně
-wrangler r2 bucket create helpdesk-attachments
-npm run dev
+Copy-Item .dev.vars.example .dev.vars     # doplnit INVITE_SECRET
+npm run db:init                            # aplikuje schema.sql na lokální D1
+# seed firmy s tokenem + projektu:
+wrangler d1 execute helpdesk-db --local --command "INSERT INTO company (id,name,token,is_provider,created_at) VALUES ('c1','maxferit','dev-token',1,strftime('%s','now'));"
+wrangler d1 execute helpdesk-db --local --command "INSERT INTO project (id,company_id,name,created_at) VALUES ('p1','c1','Interni',strftime('%s','now'));"
+npm run dev                                # http://127.0.0.1:8787  (login token: dev-token)
 ```
-Smoke test (nový terminál):
-```powershell
-# 1) seed firmy s tokenem + projektu (lokální DB)
-wrangler d1 execute helpdesk-db --command "INSERT INTO company (id,name,token,is_provider,created_at) VALUES ('c1','maxferit','dev-token',1,strftime('%s','now'));"
-wrangler d1 execute helpdesk-db --command "INSERT INTO project (id,company_id,name,created_at) VALUES ('p1','c1','Interní',strftime('%s','now'));"
-# 2) API
-curl http://localhost:8787/api/health
-curl -X POST http://localhost:8787/api/tickets -H "x-helpdesk-token: dev-token" -H "content-type: application/json" -d '{"project_id":"p1","title":"Test ticket","description":"Něco nejede"}'
-```
+> Pozn.: `wrangler dev` poslouchá na `127.0.0.1` (ne `localhost`/IPv6). AI binding je remote (jen warning).
 
-## Nasazení
-`npm run deploy` (účet bass443). Před produkcí: `--remote` init D1, `wrangler secret put INVITE_SECRET`,
-doplnit `database_id`. Deploy až po svolení.
+## Nasazení (produkce, účet bass443)
+```powershell
+wrangler d1 create helpdesk-db             # database_id -> wrangler.jsonc
+wrangler d1 execute helpdesk-db --remote --file=schema.sql
+wrangler r2 bucket create helpdesk-attachments
+wrangler secret put INVITE_SECRET
+npm run deploy                             # -> helpdesk.maxferit.com
+```
