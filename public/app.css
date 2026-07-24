@@ -150,3 +150,19 @@ td.num { font-family:"Cascadia Code",monospace; color:var(--muted); font-variant
 .term-prompt { color:var(--accent); font-family:"Cascadia Code",ui-monospace,monospace; }
 #term-in { flex:1; background:transparent; border:none; color:#e7edf3; font:13px "Cascadia Code",ui-monospace,monospace; padding:4px 0; }
 #term-in:focus { outline:none; }
+.log { background:#0a0f14; border:1px solid var(--border-strong); border-radius:var(--radius); padding:8px 12px; max-height:64vh; overflow:auto; font:12px/1.55 "Cascadia Code",ui-monospace,Consolas,monospace; box-shadow:var(--shadow); }
+.log-row { display:flex; gap:10px; padding:1px 0; }
+.log-row .lt { color:#6e7c89; flex:0 0 128px; }
+.log-row .ls { color:var(--accent); flex:0 0 120px; }
+.log-row .lm { flex:1; word-break:break-word; }
+.lv-ok{color:#4ec38a;} .lv-warn{color:#e0a64b;} .lv-crit{color:#eb6a5c;} .lv-info{color:#c7d2da;}
+.kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
+.ktile { background:var(--surface); border:1px solid var(--border); border-left:4px solid var(--border); border-radius:8px; padding:13px; box-shadow:var(--shadow); }
+.ktile .kl { color:var(--faint); font-size:10px; text-transform:uppercase; letter-spacing:.5px; }
+.ktile .kv { font-size:28px; font-weight:700; margin-top:3px; font-variant-numeric:tabular-nums; }
+.ktile.ok{border-left-color:var(--ok);} .ktile.ok .kv{color:var(--ok);}
+.ktile.warn{border-left-color:var(--warn);} .ktile.warn .kv{color:var(--warn);}
+.ktile.crit{border-left-color:var(--crit);} .ktile.crit .kv{color:var(--crit);}
+.ktile.info{border-left-color:var(--info);}
+.docs h2 { font-size:16px; margin:20px 0 8px; } .docs h2:first-child { margin-top:0; }
+.docs p { max-width:72ch; } .docs ul.clean li { max-width:74ch; }

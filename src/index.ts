@@ -324,7 +324,42 @@ async function acceptInvite(env: Env, req: Request): Promise<Response> {
   return json({ ok: true, email: p.email });
 }
 
-// ── admin terminál ───────────────────────────────────────────────────────────
+// ── audit log (živý terminál + filtrovatelná historie) ──────────────────────
+async function getAuditLog(env: Env, url: URL): Promise<Response> {
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "40", 10) || 40, 1), 300);
+  const action = (url.searchParams.get("action") || "").trim();
+  const entity = (url.searchParams.get("entity") || "").trim();
+  const where: string[] = [];
+  const binds: any[] = [];
+  if (action) { where.push("action LIKE ?"); binds.push("%" + action + "%"); }
+  if (entity) { where.push("entity_type = ?"); binds.push(entity); }
+  const sql = `SELECT id, at, actor_id, action, entity_type, entity_id FROM audit_log
+    ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY at DESC LIMIT ?`;
+  binds.push(limit);
+  const { results } = await env.DB.prepare(sql).bind(...binds).all();
+  return json({ events: results });
+}
+
+async function getKpi(env: Env): Promise<Response> {
+  const OPEN = "('open','customer_collab','in_progress','waiting_deploy','third_party','on_hold','offer_sent')";
+  const CLOSED = "('closed_invoiced','closed_not_invoiced','accepted')";
+  const r: any = await env.DB.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM issue) AS total,
+       (SELECT COUNT(*) FROM issue WHERE status = 'new') AS novy,
+       (SELECT COUNT(*) FROM issue WHERE status IN ${OPEN}) AS otevrene,
+       (SELECT COUNT(*) FROM issue WHERE status IN ${CLOSED}) AS uzavrene,
+       (SELECT COUNT(*) FROM issue WHERE sla_breached = 1 AND status NOT IN ${CLOSED}) AS sla_breach,
+       (SELECT COUNT(*) FROM issue WHERE priority = 'blocking' AND status NOT IN ${CLOSED}) AS blokacni,
+       (SELECT COUNT(*) FROM issue WHERE status IN ${OPEN} AND assignee_id IS NULL) AS neprirazene,
+       (SELECT COUNT(*) FROM company) AS firmy,
+       (SELECT COUNT(*) FROM user) AS uzivatele,
+       (SELECT COUNT(*) FROM project) AS projekty`,
+  ).first();
+  return json({ kpi: r });
+}
+
+// ── admin terminál (příkazy — read-only) ─────────────────────────────────────
 function termTable(rows: any[]): string {
   if (!rows || !rows.length) return "(0 řádků)";
   const cols = Object.keys(rows[0]);
@@ -612,6 +647,8 @@ export default {
           if (p === "/api/admin/companies" && req.method === "GET") return await listCompanies(env);
           if (p === "/api/admin/companies" && req.method === "POST") return await createCompany(env, req);
           if (p === "/api/admin/terminal" && req.method === "POST") return await adminTerminal(env, req);
+          if (p === "/api/admin/audit" && req.method === "GET") return await getAuditLog(env, url);
+          if (p === "/api/admin/kpi" && req.method === "GET") return await getKpi(env);
           const am = p.match(/^\/api\/admin\/companies\/([^/]+)(\/token|\/revoke|\/email)$/);
           if (am && req.method === "POST") {
             if (am[2] === "/token") return await setCompanyToken(env, am[1], req);

@@ -7,7 +7,8 @@
     lang: localStorage.getItem("hd_lang") || "cs",
     view: "login", env: "user",
     me: null, meta: null, projects: [], health: null, companies: [], contacts: [], invite: null,
-    term: { lines: ["HelpDesk terminál — napiš 'help'."], history: [], hi: -1 },
+    log: { events: [], action: "", paused: false }, hist: { events: [], action: "", entity: "", limit: 100 },
+    kpi: null, retention: [],
     tickets: [], current: null, createMode: "easy", filterProject: "",
   };
 
@@ -48,7 +49,9 @@
       email: "E-mail", first_name: "Jméno", last_name: "Příjmení", password: "Heslo", optional: "nepovinné",
       accept: "Přijmout pozvánku", accept_ok: "Účet vytvořen. Přihlas se tokenem firmy.",
       invite_to: "Pozvánka do firmy", bad_invite: "Neplatná nebo prošlá pozvánka",
-      tt_role: "Oprávnění kontaktu (co smí — zakládat požadavky, schvalovat, sledovat…)", terminal: "Terminál" },
+      tt_role: "Oprávnění kontaktu (co smí — zakládat požadavky, schvalovat, sledovat…)", terminal: "Terminál", docs: "Dokumentace",
+      history: "Historie", settings: "Nastavení", kpi: "KPI", live: "živě", pause: "Pauza", resume: "Pokračovat",
+      flt_action: "akce obsahuje…", entity_all: "všechny entity", whenc: "Čas", action_c: "Akce", entity_col: "Entita" },
     en: { app: "HelpDesk", login_p: "Enter your company access token", token_ph: "company token",
       connect: "Connect", tickets: "Tickets", new_ticket: "New ticket", logout: "Log out",
       back: "← Back", number: "No.", title: "Title", status: "Status", priority: "Priority",
@@ -85,7 +88,9 @@
       email: "Email", first_name: "First name", last_name: "Last name", password: "Password", optional: "optional",
       accept: "Accept invitation", accept_ok: "Account created. Sign in with the company token.",
       invite_to: "Invitation to", bad_invite: "Invalid or expired invitation",
-      tt_role: "Contact permission (create requests, approve, watch…)", terminal: "Terminal" },
+      tt_role: "Contact permission (create requests, approve, watch…)", terminal: "Terminal", docs: "Docs",
+      history: "History", settings: "Settings", kpi: "KPI", live: "live", pause: "Pause", resume: "Resume",
+      flt_action: "action contains…", entity_all: "all entities", whenc: "Time", action_c: "Action", entity_col: "Entity" },
   };
   const t = (k) => (T[state.lang][k] ?? T.cs[k] ?? k);
 
@@ -260,7 +265,7 @@
   function header() {
     const ai = state.health && state.health.ai, on = ai && ai !== "off";
     const ticketsOn = ["list", "detail", "create"].includes(state.view);
-    const nav = `${state.env === "admin" ? `<button class="btn ghost sm ${state.view === "admin" ? "on" : ""}" data-act="go-admin">${t("firms")}</button><button class="btn ghost sm ${state.view === "terminal" ? "on" : ""}" data-act="go-terminal">${t("terminal")}</button>` : ""}
+    const nav = `${state.env === "admin" ? `<button class="btn ghost sm ${state.view === "admin" ? "on" : ""}" data-act="go-admin">${t("firms")}</button><button class="btn ghost sm ${state.view === "kpi" ? "on" : ""}" data-act="go-kpi">${t("kpi")}</button><button class="btn ghost sm ${state.view === "terminal" ? "on" : ""}" data-act="go-terminal">${t("terminal")}</button><button class="btn ghost sm ${state.view === "history" ? "on" : ""}" data-act="go-history">${t("history")}</button><button class="btn ghost sm ${state.view === "settings" ? "on" : ""}" data-act="go-settings">${t("settings")}</button><button class="btn ghost sm ${state.view === "docs" ? "on" : ""}" data-act="go-docs">${t("docs")}</button>` : ""}
       <button class="btn ghost sm ${ticketsOn ? "on" : ""}" data-act="go-tickets">${t("env_user")}</button>
       <button class="btn ghost sm ${state.view === "projects" ? "on" : ""}" data-act="go-projects">${t("projects_nav")}</button>
       <button class="btn ghost sm ${state.view === "contacts" ? "on" : ""}" data-act="go-contacts">${t("contacts")}</button>`;
@@ -450,24 +455,135 @@
         <th>${t("name")}</th><th>${t("email")}</th><th title="${t("tt_role")}">${t("role")}</th><th>${t("active")}</th>
       </tr></thead><tbody>${rows}</tbody></table></div></main>`;
   }
+  function auditLevel(a) { a = a || ""; if (/revoke|delete|decline|breach|error/.test(a)) return "crit"; if (/reject|expire|hold|retention/.test(a)) return "warn"; if (/create|accept|approve|add|status/.test(a)) return "ok"; return "info"; }
+  function logRowsHtml() {
+    return [...state.log.events].reverse().map((e) => {
+      const lv = auditLevel(e.action);
+      return `<div class="log-row"><span class="lt">${fmtDate(e.at)}</span><span class="ls">[${esc(e.entity_type)}]</span><span class="lm lv-${lv}">${esc(e.action)}${e.entity_id ? " " + esc(String(e.entity_id).slice(0, 8)) : ""}</span></div>`;
+    }).join("") || `<div class="empty">—</div>`;
+  }
+  async function loadLog() { const q = state.log.action ? "?limit=60&action=" + encodeURIComponent(state.log.action) : "?limit=60"; state.log.events = (await api("/admin/audit" + q)).events || []; }
+  async function loadHist() { const q = new URLSearchParams(); if (state.hist.action) q.set("action", state.hist.action); if (state.hist.entity) q.set("entity", state.hist.entity); q.set("limit", state.hist.limit); state.hist.events = (await api("/admin/audit?" + q.toString())).events || []; }
+  async function loadKpi() { state.kpi = (await api("/admin/kpi")).kpi || {}; }
+  async function loadRetention() { state.retention = (await api("/retention")).policies || []; }
   function viewTerminal() {
     return header() + `<main>
-      <div class="toolbar"><h1>${t("terminal")}</h1></div>
-      <div class="term"><pre id="term-out">${esc(state.term.lines.join("\n"))}</pre>
-      <div class="term-inrow"><span class="term-prompt">&gt;</span><input id="term-in" data-term autocomplete="off" spellcheck="false"/></div></div>
-    </main>`;
+      <div class="toolbar"><h1>${t("terminal")} <span style="color:var(--ok);font-size:13px">● ${t("live")}</span></h1><span class="spacer"></span>
+        <input id="log-flt" placeholder="${t("flt_action")}" value="${esc(state.log.action)}" data-change="logflt" style="max-width:200px"/>
+        <button class="btn sm" data-act="log-pause">${state.log.paused ? "▶ " + t("resume") : "⏸ " + t("pause")}</button>
+        <button class="btn sm" data-act="log-copy" title="${t("copy")}">⧉</button>
+      </div>
+      <div class="log" id="log-out">${logRowsHtml()}</div></main>`;
+  }
+  function viewHistory() {
+    const entities = ["", "issue", "message", "company", "project", "user", "invitation"];
+    const eOpts = entities.map((x) => `<option value="${x}" ${x === state.hist.entity ? "selected" : ""}>${x || t("entity_all")}</option>`).join("");
+    const rows = state.hist.events.map((e) => `<tr><td class="num">${fmtDate(e.at)}</td><td class="mono">${esc(e.action)}</td><td>${esc(e.entity_type)}</td><td class="mono">${esc(String(e.entity_id || "").slice(0, 12))}</td></tr>`).join("") || `<tr><td colspan="4"><div class="empty">—</div></td></tr>`;
+    return header() + `<main>
+      <div class="toolbar"><h1>${t("history")}</h1><span class="spacer"></span>
+        <input id="h-act" placeholder="${t("flt_action")}" value="${esc(state.hist.action)}" style="max-width:170px"/>
+        <select id="h-ent">${eOpts}</select>
+        <input id="h-lim" type="number" value="${state.hist.limit}" title="limit" style="max-width:90px"/>
+        <button class="btn" data-act="hist-apply">${t("apply")}</button>
+      </div>
+      <div class="tablewrap"><table><thead><tr><th>${t("whenc")}</th><th>${t("action_c")}</th><th>${t("entity_col")}</th><th>id</th></tr></thead><tbody>${rows}</tbody></table></div></main>`;
+  }
+  function viewKpi() {
+    const k = state.kpi || {};
+    const prob = (label, val, kind) => `<div class="ktile ${(val || 0) > 0 ? kind : "ok"}"><div class="kl">${label}</div><div class="kv">${val ?? 0}</div></div>`;
+    const info = (label, val) => `<div class="ktile info"><div class="kl">${label}</div><div class="kv">${val ?? 0}</div></div>`;
+    return header() + `<main>
+      <div class="toolbar"><h1>${t("kpi")}</h1></div>
+      <div class="kpi-grid">
+        ${prob("SLA breach", k.sla_breach, "crit")}
+        ${prob("Blokační (otevřené)", k.blokacni, "crit")}
+        ${prob("Nepřiřazené", k.neprirazene, "warn")}
+        ${info("Otevřené", k.otevrene)}
+        ${info("Nové", k.novy)}
+        <div class="ktile ok"><div class="kl">Uzavřené</div><div class="kv">${k.uzavrene ?? 0}</div></div>
+        ${info("Tickety celkem", k.total)}
+        ${info("Firmy", k.firmy)}
+        ${info("Uživatelé", k.uzivatele)}
+        ${info("Projekty", k.projekty)}
+      </div>
+      <div class="card" style="margin-top:16px"><h2 style="margin-top:0">Legenda KPI</h2><ul class="clean">
+        <li><b>SLA breach</b> — otevřené tickety po termínu SLA (červená, když &gt; 0).</li>
+        <li><b>Blokační (otevřené)</b> — otevřené tickety s prioritou blokační.</li>
+        <li><b>Nepřiřazené</b> — otevřené tickety bez řešitele (žlutá, když &gt; 0).</li>
+        <li><b>Otevřené</b> = v řešení a příbuzné · <b>Nové</b> = čekají · <b>Uzavřené</b> = vyřešené.</li>
+        <li>Princip „<b>zelená na nule</b>": problémové dlaždice jsou barevné jen když je co řešit.</li>
+      </ul></div></main>`;
+  }
+  function viewSettings() {
+    const cats = ["closed_tickets", "audit_log", "attachments", "inactive_users"];
+    const cur = {}; (state.retention || []).forEach((r) => { cur[r.category] = r; });
+    const actSel = (id, v) => `<select id="${id}"><option value="anonymize" ${v === "anonymize" ? "selected" : ""}>anonymizovat</option><option value="delete" ${v === "delete" ? "selected" : ""}>smazat</option></select>`;
+    const rrows = cats.map((c) => { const r = cur[c] || {}; return `<tr><td>${c}</td><td><input id="rm_${c}" type="number" value="${r.months ?? ""}" placeholder="navždy" style="max-width:110px"/></td><td>${actSel("ra_" + c, r.action)}</td><td><button class="btn sm" data-act="ret-save" data-cat="${c}">${t("save")}</button></td></tr>`; }).join("");
+    const h = state.health || {};
+    return header() + `<main>
+      <div class="toolbar"><h1>${t("settings")}</h1></div>
+      <div class="card" style="margin-bottom:16px"><h2 style="margin-top:0">Systém</h2><ul class="clean">
+        <li>AI backend: <code>${esc(h.ai || "?")}</code></li>
+        <li>Verze: <code>${esc(h.commit || "dev")}</code> · build ${esc(h.built || "")}</li>
+      </ul></div>
+      <div class="card"><h2 style="margin-top:0">Retenční politika (GDPR)</h2>
+        <p style="margin-top:0;color:var(--muted)">Kolik měsíců se data drží, pak akce. Prázdné = navždy (nemaže se). Legal-hold ticket je vždy vyňat.</p>
+        <div class="tablewrap"><table><thead><tr><th>kategorie</th><th>měsíce</th><th>akce</th><th></th></tr></thead><tbody>${rrows}</tbody></table></div>
+      </div></main>`;
+  }
+  function viewDocs() {
+    return header() + `<main>
+      <div class="toolbar"><h1>${t("docs")}</h1></div>
+      <div class="card docs">
+        <h2>Přihlášení a prostředí</h2>
+        <p>Přihlašuješ se <b>tokenem firmy</b>. Podle tokenu tě systém pustí do <b>admin</b> prostředí (provozovatel) nebo <b>user</b> prostředí (klient). V hlavičce běží živý čas a je vidět <b>commit</b> nasazené verze (najetím myší = čas buildu).</p>
+        <h2>Firmy</h2>
+        <ul class="clean">
+          <li><b>Nová firma</b>: název, e-mail admina, volitelná expirace tokenu (konkrétní datum nebo 1/6/12 měsíců).</li>
+          <li><b>Token</b>: „Nový token" přegeneruje (u vlastního tě to nevyhodí — bezešvá výměna), „Použít" uloží expiraci, „Revokovat" zneplatní.</li>
+          <li><b>Admin token je trvalý</b> (nejde nechat expirovat). <b>E-mail admina</b> se ukládá automaticky (kotva pro obnovu).</li>
+        </ul>
+        <h2>Projekty</h2>
+        <ul class="clean">
+          <li><b>Klíč</b> = prefix v číslech ticketů (<code>IT</code> → <code>IT-270</code>), číslování per projekt.</li>
+          <li><b>Max. hloubka</b> = kolik úrovní podúkolů lze zanořit. <b>Viditelnost</b>: sdílené / interní.</li>
+        </ul>
+        <h2>Kontakty</h2>
+        <ul class="clean">
+          <li>Lidé firmy + role/oprávnění. <b>Pozvat</b> → odkaz do schránky → příjemce potvrdí → vznikne uživatel.</li>
+        </ul>
+        <h2>Tickety</h2>
+        <ul class="clean">
+          <li><b>Easy</b> = jen popis (AI dopočítá název/zařazení/prioritu). <b>Extended</b> = plný formulář.</li>
+          <li><b>Priorita</b>: blokační/kritická/vysoká/nízká (ovlivňuje SLA). <b>Stav</b>: Nový → Otevřený → V řešení → … → Uzavřený.</li>
+        </ul>
+        <h2>Ops konzole</h2>
+        <ul class="clean">
+          <li><b>KPI</b> — přehledové dlaždice (zelená na nule, barevné jen při problému) + legenda.</li>
+          <li><b>Terminál</b> — pasivní <b>živý log</b> (co systém dělá, auto-obnova 2,5 s), s pauzou a filtrem.</li>
+          <li><b>Historie</b> — filtrovatelný audit (akce, entita, limit).</li>
+          <li><b>Nastavení</b> — systém (AI backend, verze) a <b>retenční politika</b> (GDPR).</li>
+        </ul>
+        <h2>Vzhled a jazyk</h2>
+        <p>Přepínač <b>motivu</b> (☀/☾) a <b>jazyka</b> (CS/EN) je v hlavičce, volba se pamatuje.</p>
+        <p style="color:var(--muted);margin-top:16px">Plný technický návrh a HANDOFF jsou v repozitáři <code>Anamax443/helpdesk</code>.</p>
+      </div></main>`;
   }
   function render() {
     app.innerHTML = state.view === "login" ? viewLogin()
       : state.view === "invite" ? viewInvite()
       : state.view === "admin" ? viewAdmin()
       : state.view === "terminal" ? viewTerminal()
+      : state.view === "history" ? viewHistory()
+      : state.view === "settings" ? viewSettings()
+      : state.view === "kpi" ? viewKpi()
+      : state.view === "docs" ? viewDocs()
       : state.view === "projects" ? viewProjects()
       : state.view === "contacts" ? viewContacts()
       : state.view === "create" ? viewCreate()
       : state.view === "detail" ? viewDetail() : viewList();
     updateClock();
-    if (state.view === "terminal") { const i = document.getElementById("term-in"); if (i) i.focus(); const o = document.getElementById("term-out"); if (o) o.scrollTop = o.scrollHeight; }
+    if (state.view === "terminal") { const o = document.getElementById("log-out"); if (o) o.scrollTop = o.scrollHeight; }
   }
 
   // ---- events ----
@@ -497,7 +613,15 @@
       else if (act === "projcreate") { await projCreate(); }
       else if (act === "projsave") { await projSave(el.dataset.id); }
       else if (act === "go-contacts") { await loadContacts(); state.view = "contacts"; render(); }
-      else if (act === "go-terminal") { state.view = "terminal"; render(); }
+      else if (act === "go-terminal") { await loadLog(); state.view = "terminal"; render(); }
+      else if (act === "go-kpi") { await loadKpi(); state.view = "kpi"; render(); }
+      else if (act === "go-history") { await loadHist(); state.view = "history"; render(); }
+      else if (act === "go-settings") { await loadRetention(); state.view = "settings"; render(); }
+      else if (act === "go-docs") { state.view = "docs"; render(); }
+      else if (act === "log-pause") { state.log.paused = !state.log.paused; render(); }
+      else if (act === "log-copy") { try { await navigator.clipboard.writeText(state.log.events.map((e) => fmtDate(e.at) + " [" + e.entity_type + "] " + e.action).join("\n")); toast(t("copied")); } catch {} }
+      else if (act === "hist-apply") { state.hist.action = document.getElementById("h-act").value.trim(); state.hist.entity = document.getElementById("h-ent").value; state.hist.limit = parseInt(document.getElementById("h-lim").value) || 100; await loadHist(); render(); }
+      else if (act === "ret-save") { const c = el.dataset.cat; const m = document.getElementById("rm_" + c).value; const a = document.getElementById("ra_" + c).value; await api("/retention", { method: "POST", body: JSON.stringify({ category: c, months: m === "" ? null : parseInt(m), action: a }) }); toast(t("save")); await loadRetention(); render(); }
       else if (act === "invite") {
         const email = document.getElementById("inv_email").value.trim(); if (!email) return toast(t("email"), true);
         const role = document.getElementById("inv_role").value;
@@ -525,6 +649,7 @@
       try { await api("/admin/companies/" + el.dataset.id + "/email", { method: "POST", body: JSON.stringify({ email: el.value.trim() }) }); toast(t("save")); }
       catch (err) { toast((err.data && err.data.error) || "Chyba", true); }
     }
+    else if (el.dataset.change === "logflt") { state.log.action = el.value.trim(); await loadLog(); const o = document.getElementById("log-out"); if (o) { o.innerHTML = logRowsHtml(); o.scrollTop = o.scrollHeight; } }
   });
   app.addEventListener("keydown", async (e) => {
     const el = e.target.closest("[data-term]"); if (!el) return;
@@ -535,5 +660,6 @@
   });
 
   setInterval(updateClock, 1000);
+  setInterval(async () => { if (state.view === "terminal" && !state.log.paused) { try { await loadLog(); const o = document.getElementById("log-out"); if (o) { o.innerHTML = logRowsHtml(); o.scrollTop = o.scrollHeight; } } catch {} } }, 2500);
   boot();
 })();
