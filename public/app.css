@@ -144,3 +144,9 @@ td.num { font-family:"Cascadia Code",monospace; color:var(--muted); font-variant
 .seg button.on { background:var(--accent); color:#fff; }
 .btn.on { color:var(--accent); border-color:var(--accent); }
 .rowacts { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.term { background:#0b0f14; border:1px solid var(--border-strong); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
+.term pre { margin:0 0 8px; color:#c7d2da; white-space:pre-wrap; word-break:break-word; max-height:62vh; overflow:auto; font:13px/1.5 "Cascadia Code",ui-monospace,Consolas,monospace; }
+.term-inrow { display:flex; align-items:center; gap:8px; border-top:1px solid #1b2430; padding-top:8px; }
+.term-prompt { color:var(--accent); font-family:"Cascadia Code",ui-monospace,monospace; }
+#term-in { flex:1; background:transparent; border:none; color:#e7edf3; font:13px "Cascadia Code",ui-monospace,monospace; padding:4px 0; }
+#term-in:focus { outline:none; }

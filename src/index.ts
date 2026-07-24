@@ -324,6 +324,66 @@ async function acceptInvite(env: Env, req: Request): Promise<Response> {
   return json({ ok: true, email: p.email });
 }
 
+// ── admin terminál ───────────────────────────────────────────────────────────
+function termTable(rows: any[]): string {
+  if (!rows || !rows.length) return "(0 řádků)";
+  const cols = Object.keys(rows[0]);
+  const head = cols.join(" | ");
+  const body = rows.map((r) => cols.map((c) => String(r[c] ?? "")).join(" | ")).join("\n");
+  return head + "\n" + "-".repeat(Math.min(head.length, 90)) + "\n" + body;
+}
+async function adminTerminal(env: Env, req: Request): Promise<Response> {
+  const b = (await req.json().catch(() => ({}))) as Record<string, any>;
+  const cmd = String(b.cmd || "").trim();
+  const parts = cmd.split(/\s+/);
+  const c = (parts[0] || "").toLowerCase();
+  const HELP = [
+    "Příkazy:",
+    "  help                tato nápověda",
+    "  stats               počty (firmy, uživatelé, projekty, tickety, zprávy)",
+    "  companies           seznam firem",
+    "  projects            seznam projektů",
+    "  audit [n]           posledních n záznamů auditu (default 20, max 100)",
+    "  sql <SELECT ...>    read-only SQL dotaz nad D1 (jen SELECT, bez ;)",
+    "  clear               vyčistit terminál",
+  ].join("\n");
+  try {
+    if (!c) return json({ output: "" });
+    if (c === "help" || c === "?") return json({ output: HELP });
+    if (c === "stats") {
+      const r: any = await env.DB.prepare(
+        `SELECT (SELECT COUNT(*) FROM company) AS firmy, (SELECT COUNT(*) FROM user) AS uzivatele,
+                (SELECT COUNT(*) FROM project) AS projekty, (SELECT COUNT(*) FROM issue) AS tickety,
+                (SELECT COUNT(*) FROM message) AS zpravy`,
+      ).first();
+      return json({ output: Object.entries(r).map(([k, v]) => `${k}: ${v}`).join("\n") });
+    }
+    if (c === "companies") {
+      const { results } = await env.DB.prepare(`SELECT name, is_provider, substr(token,1,10) AS token, recovery_email FROM company ORDER BY is_provider DESC, name`).all();
+      return json({ output: termTable(results as any[]) });
+    }
+    if (c === "projects") {
+      const { results } = await env.DB.prepare(`SELECT key, name, (SELECT COUNT(*) FROM issue i WHERE i.project_id = p.id) AS tickety FROM project p ORDER BY key`).all();
+      return json({ output: termTable(results as any[]) });
+    }
+    if (c === "audit") {
+      const n = Math.min(Math.max(parseInt(parts[1] || "20", 10) || 20, 1), 100);
+      const { results } = await env.DB.prepare(`SELECT datetime(at, 'unixepoch', 'localtime') AS cas, action, entity_type AS typ, entity_id AS id FROM audit_log ORDER BY at DESC LIMIT ?`).bind(n).all();
+      return json({ output: termTable(results as any[]) });
+    }
+    if (c === "sql") {
+      const q = cmd.slice(3).trim();
+      if (!/^select\b/i.test(q)) return json({ output: "Povoleny jsou jen SELECT dotazy." });
+      if (q.includes(";")) return json({ output: "Jen jeden dotaz, bez středníku." });
+      const { results } = await env.DB.prepare(q).all();
+      return json({ output: termTable(results as any[]) });
+    }
+    return json({ output: `Neznámý příkaz '${c}'. Napiš 'help'.` });
+  } catch (e: any) {
+    return json({ output: "Chyba: " + String(e?.message ?? e) });
+  }
+}
+
 async function createTicket(env: Env, company: any, req: Request): Promise<Response> {
   const b = (await req.json().catch(() => ({}))) as Record<string, any>;
   if (!b.project_id || !b.title) return json({ error: "project_id a title jsou povinné" }, 400);
@@ -551,6 +611,7 @@ export default {
           if (company.is_provider !== 1) return json({ error: "jen provider-admin" }, 403);
           if (p === "/api/admin/companies" && req.method === "GET") return await listCompanies(env);
           if (p === "/api/admin/companies" && req.method === "POST") return await createCompany(env, req);
+          if (p === "/api/admin/terminal" && req.method === "POST") return await adminTerminal(env, req);
           const am = p.match(/^\/api\/admin\/companies\/([^/]+)(\/token|\/revoke|\/email)$/);
           if (am && req.method === "POST") {
             if (am[2] === "/token") return await setCompanyToken(env, am[1], req);

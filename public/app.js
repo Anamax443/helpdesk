@@ -7,6 +7,7 @@
     lang: localStorage.getItem("hd_lang") || "cs",
     view: "login", env: "user",
     me: null, meta: null, projects: [], health: null, companies: [], contacts: [], invite: null,
+    term: { lines: ["HelpDesk terminál — napiš 'help'."], history: [], hi: -1 },
     tickets: [], current: null, createMode: "easy", filterProject: "",
   };
 
@@ -47,7 +48,7 @@
       email: "E-mail", first_name: "Jméno", last_name: "Příjmení", password: "Heslo", optional: "nepovinné",
       accept: "Přijmout pozvánku", accept_ok: "Účet vytvořen. Přihlas se tokenem firmy.",
       invite_to: "Pozvánka do firmy", bad_invite: "Neplatná nebo prošlá pozvánka",
-      tt_role: "Oprávnění kontaktu (co smí — zakládat požadavky, schvalovat, sledovat…)" },
+      tt_role: "Oprávnění kontaktu (co smí — zakládat požadavky, schvalovat, sledovat…)", terminal: "Terminál" },
     en: { app: "HelpDesk", login_p: "Enter your company access token", token_ph: "company token",
       connect: "Connect", tickets: "Tickets", new_ticket: "New ticket", logout: "Log out",
       back: "← Back", number: "No.", title: "Title", status: "Status", priority: "Priority",
@@ -84,7 +85,7 @@
       email: "Email", first_name: "First name", last_name: "Last name", password: "Password", optional: "optional",
       accept: "Accept invitation", accept_ok: "Account created. Sign in with the company token.",
       invite_to: "Invitation to", bad_invite: "Invalid or expired invitation",
-      tt_role: "Contact permission (create requests, approve, watch…)" },
+      tt_role: "Contact permission (create requests, approve, watch…)", terminal: "Terminal" },
   };
   const t = (k) => (T[state.lang][k] ?? T.cs[k] ?? k);
 
@@ -158,6 +159,15 @@
   }
   async function loadContacts() {
     state.contacts = (await api("/contacts")).contacts || [];
+  }
+  async function runTerminal(cmd) {
+    cmd = (cmd || "").trim(); if (!cmd) return;
+    state.term.history.push(cmd); state.term.hi = -1;
+    if (cmd.toLowerCase() === "clear") { state.term.lines = []; render(); return; }
+    state.term.lines.push("> " + cmd);
+    try { const r = await api("/admin/terminal", { method: "POST", body: JSON.stringify({ cmd }) }); if (r.output) state.term.lines.push(r.output); }
+    catch (err) { state.term.lines.push("Chyba: " + ((err.data && err.data.error) || err.status)); }
+    render();
   }
   async function openTicket(id) {
     state.current = await api("/tickets/" + id); state.view = "detail"; render();
@@ -250,7 +260,7 @@
   function header() {
     const ai = state.health && state.health.ai, on = ai && ai !== "off";
     const ticketsOn = ["list", "detail", "create"].includes(state.view);
-    const nav = `${state.env === "admin" ? `<button class="btn ghost sm ${state.view === "admin" ? "on" : ""}" data-act="go-admin">${t("firms")}</button>` : ""}
+    const nav = `${state.env === "admin" ? `<button class="btn ghost sm ${state.view === "admin" ? "on" : ""}" data-act="go-admin">${t("firms")}</button><button class="btn ghost sm ${state.view === "terminal" ? "on" : ""}" data-act="go-terminal">${t("terminal")}</button>` : ""}
       <button class="btn ghost sm ${ticketsOn ? "on" : ""}" data-act="go-tickets">${t("env_user")}</button>
       <button class="btn ghost sm ${state.view === "projects" ? "on" : ""}" data-act="go-projects">${t("projects_nav")}</button>
       <button class="btn ghost sm ${state.view === "contacts" ? "on" : ""}" data-act="go-contacts">${t("contacts")}</button>`;
@@ -440,15 +450,24 @@
         <th>${t("name")}</th><th>${t("email")}</th><th title="${t("tt_role")}">${t("role")}</th><th>${t("active")}</th>
       </tr></thead><tbody>${rows}</tbody></table></div></main>`;
   }
+  function viewTerminal() {
+    return header() + `<main>
+      <div class="toolbar"><h1>${t("terminal")}</h1></div>
+      <div class="term"><pre id="term-out">${esc(state.term.lines.join("\n"))}</pre>
+      <div class="term-inrow"><span class="term-prompt">&gt;</span><input id="term-in" data-term autocomplete="off" spellcheck="false"/></div></div>
+    </main>`;
+  }
   function render() {
     app.innerHTML = state.view === "login" ? viewLogin()
       : state.view === "invite" ? viewInvite()
       : state.view === "admin" ? viewAdmin()
+      : state.view === "terminal" ? viewTerminal()
       : state.view === "projects" ? viewProjects()
       : state.view === "contacts" ? viewContacts()
       : state.view === "create" ? viewCreate()
       : state.view === "detail" ? viewDetail() : viewList();
     updateClock();
+    if (state.view === "terminal") { const i = document.getElementById("term-in"); if (i) i.focus(); const o = document.getElementById("term-out"); if (o) o.scrollTop = o.scrollHeight; }
   }
 
   // ---- events ----
@@ -478,6 +497,7 @@
       else if (act === "projcreate") { await projCreate(); }
       else if (act === "projsave") { await projSave(el.dataset.id); }
       else if (act === "go-contacts") { await loadContacts(); state.view = "contacts"; render(); }
+      else if (act === "go-terminal") { state.view = "terminal"; render(); }
       else if (act === "invite") {
         const email = document.getElementById("inv_email").value.trim(); if (!email) return toast(t("email"), true);
         const role = document.getElementById("inv_role").value;
@@ -505,6 +525,13 @@
       try { await api("/admin/companies/" + el.dataset.id + "/email", { method: "POST", body: JSON.stringify({ email: el.value.trim() }) }); toast(t("save")); }
       catch (err) { toast((err.data && err.data.error) || "Chyba", true); }
     }
+  });
+  app.addEventListener("keydown", async (e) => {
+    const el = e.target.closest("[data-term]"); if (!el) return;
+    const h = state.term.history;
+    if (e.key === "Enter") { e.preventDefault(); const v = el.value; el.value = ""; await runTerminal(v); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); if (h.length) { state.term.hi = (state.term.hi < 0 ? h.length : state.term.hi) - 1; if (state.term.hi < 0) state.term.hi = 0; el.value = h[state.term.hi] || ""; } }
+    else if (e.key === "ArrowDown") { e.preventDefault(); if (state.term.hi >= 0) { state.term.hi++; if (state.term.hi >= h.length) { state.term.hi = -1; el.value = ""; } else el.value = h[state.term.hi]; } }
   });
 
   setInterval(updateClock, 1000);
