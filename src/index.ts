@@ -4,6 +4,7 @@
 import { Env, STATUS, TRANSITIONS, Status } from "./types";
 import { enforceRetention } from "./retention";
 import { VERSION } from "./version";
+import { signInvite, verifyInvite } from "./token";
 
 export { TicketRoom } from "./do";
 
@@ -235,6 +236,94 @@ async function setCompanyEmail(env: Env, id: string, req: Request): Promise<Resp
   return json({ id, recovery_email: email });
 }
 
+// ── kontakty + pozvánky ──────────────────────────────────────────────────────
+async function hashPassword(pw: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" }, key, 256);
+  const b64 = (u: Uint8Array) => btoa(String.fromCharCode(...u));
+  return "pbkdf2$100000$" + b64(salt) + "$" + b64(new Uint8Array(bits));
+}
+
+async function listContacts(env: Env, company: any): Promise<Response> {
+  const { results } = await env.DB.prepare(
+    `SELECT u.id, u.email, u.first_name, u.last_name, u.active,
+       (SELECT m.role FROM membership m WHERE m.user_id = u.id AND m.scope_type = 'company' AND m.scope_id = ? LIMIT 1) AS role
+     FROM user u WHERE u.company_id = ? ORDER BY u.last_name, u.first_name`,
+  ).bind(company.id, company.id).all();
+  return json({ contacts: results });
+}
+
+async function createInvitation(env: Env, company: any, req: Request): Promise<Response> {
+  const b = (await req.json().catch(() => ({}))) as Record<string, any>;
+  if (!b.email) return json({ error: "e-mail je povinný" }, 400);
+  const role = b.role || "contact";
+  const scope_type = b.scope_type || "company";
+  const scope_id = b.scope_id || company.id;
+  const exp = now() + 14 * 86400;
+  const token = await signInvite({ email: b.email, scope_type, scope_id, roles: role, exp }, env.INVITE_SECRET);
+  const id = uuid();
+  await env.DB.prepare(
+    `INSERT INTO invitation (id, email, scope_type, scope_id, roles, token, expires_at, status, invited_by, created_at)
+     VALUES (?,?,?,?,?,?,?,'pending',?,?)`,
+  ).bind(id, b.email, scope_type, scope_id, role, token, exp, company.id, now()).run();
+  await audit(env, null, "invitation.create", "invitation", id, null, { email: b.email, role, scope_type });
+  const acceptUrl = env.PUBLIC_BASE_URL + "/?invite=" + encodeURIComponent(token);
+  // TODO: odeslat pozvánku e-mailem (env.EMAIL) až bude Email Sending zapnuté; zatím vrací odkaz ke zkopírování.
+  await notify(env, "invitation.created", { email: b.email, acceptUrl });
+  return json({ id, email: b.email, accept_url: acceptUrl }, 201);
+}
+
+// veřejné (bez tokenu firmy) — příjemce pozvánky
+async function getInvite(env: Env, token: string): Promise<Response> {
+  const p = await verifyInvite(token, env.INVITE_SECRET, now());
+  if (!p) return json({ error: "neplatná nebo prošlá pozvánka" }, 400);
+  let companyName = "";
+  if (p.scope_type === "company") {
+    const c = await env.DB.prepare(`SELECT name FROM company WHERE id = ?`).bind(p.scope_id).first<{ name: string }>();
+    companyName = c?.name || "";
+  } else if (p.scope_type === "project") {
+    const c = await env.DB.prepare(`SELECT co.name FROM project p JOIN company co ON co.id = p.company_id WHERE p.id = ?`).bind(p.scope_id).first<{ name: string }>();
+    companyName = c?.name || "";
+  }
+  return json({ email: p.email, scope_type: p.scope_type, roles: p.roles, company: companyName });
+}
+
+async function acceptInvite(env: Env, req: Request): Promise<Response> {
+  const b = (await req.json().catch(() => ({}))) as Record<string, any>;
+  const p = await verifyInvite(b.token || "", env.INVITE_SECRET, now());
+  if (!p) return json({ error: "neplatná nebo prošlá pozvánka" }, 400);
+  let companyId: string = p.scope_id;
+  if (p.scope_type === "project") {
+    const row = await env.DB.prepare(`SELECT company_id FROM project WHERE id = ?`).bind(p.scope_id).first<{ company_id: string }>();
+    if (!row) return json({ error: "cíl pozvánky neexistuje" }, 400);
+    companyId = row.company_id;
+  } else if (p.scope_type === "issue") {
+    const row = await env.DB.prepare(`SELECT pr.company_id FROM issue i JOIN project pr ON pr.id = i.project_id WHERE i.id = ?`).bind(p.scope_id).first<{ company_id: string }>();
+    if (!row) return json({ error: "cíl pozvánky neexistuje" }, 400);
+    companyId = row.company_id;
+  }
+  const domain = (p.email.split("@")[1] || "").toLowerCase();
+  let user = await env.DB.prepare(`SELECT id FROM user WHERE email = ?`).bind(p.email).first<{ id: string }>();
+  let userId: string;
+  if (user) {
+    userId = user.id;
+  } else {
+    userId = uuid();
+    const pwHash = b.password ? await hashPassword(String(b.password)) : null;
+    await env.DB.prepare(
+      `INSERT INTO user (id, company_id, email, domain, first_name, last_name, password_hash, active, created_at)
+       VALUES (?,?,?,?,?,?,?,1,?)`,
+    ).bind(userId, companyId, p.email, domain, b.first_name || null, b.last_name || null, pwHash, now()).run();
+  }
+  await env.DB.prepare(
+    `INSERT INTO membership (id, user_id, scope_type, scope_id, role, party, created_at) VALUES (?,?,?,?,?,?,?)`,
+  ).bind(uuid(), userId, p.scope_type, p.scope_id, p.roles, domain, now()).run();
+  await env.DB.prepare(`UPDATE invitation SET status = 'accepted' WHERE token = ?`).bind(b.token).run();
+  await audit(env, userId, "invitation.accept", "user", userId, null, { email: p.email, role: p.roles });
+  return json({ ok: true, email: p.email });
+}
+
 async function createTicket(env: Env, company: any, req: Request): Promise<Response> {
   const b = (await req.json().catch(() => ({}))) as Record<string, any>;
   if (!b.project_id || !b.title) return json({ error: "project_id a title jsou povinné" }, 400);
@@ -429,6 +518,10 @@ export default {
         return env.TICKET.get(env.TICKET.idFromName(live[1])).fetch(req);
       }
 
+      // veřejné (bez tokenu firmy): příjemce pozvánky si ji zobrazí a přijme
+      if (p === "/api/invite" && req.method === "GET") return await getInvite(env, url.searchParams.get("token") || "");
+      if (p === "/api/invite/accept" && req.method === "POST") return await acceptInvite(env, req);
+
       const company = await authCompany(env, req);
       if (!company) return json({ error: "neplatný nebo chybějící token firmy" }, 401);
 
@@ -437,6 +530,8 @@ export default {
         if (p === "/api/projects" && req.method === "POST") return await createProject(env, company, req);
         const pm = p.match(/^\/api\/projects\/([^/]+)$/);
         if (pm && req.method === "POST") return await updateProject(env, company, pm[1], req);
+        if (p === "/api/contacts" && req.method === "GET") return await listContacts(env, company);
+        if (p === "/api/invitations" && req.method === "POST") return await createInvitation(env, company, req);
         if (p === "/api/meta" && req.method === "GET")
           return json({
             statuses: STATUS,

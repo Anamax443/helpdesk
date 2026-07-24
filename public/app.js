@@ -6,7 +6,7 @@
     token: localStorage.getItem("hd_token") || "",
     lang: localStorage.getItem("hd_lang") || "cs",
     view: "login", env: "user",
-    me: null, meta: null, projects: [], health: null, companies: [],
+    me: null, meta: null, projects: [], health: null, companies: [], contacts: [], invite: null,
     tickets: [], current: null, createMode: "easy", filterProject: "",
   };
 
@@ -40,7 +40,14 @@
       tt_created: "Datum a čas vytvoření ticketu",
       tt_token: "Přístupový token firmy — kdo ho má, přihlásí se do jejího prostředí",
       tt_email: "E-mail admina — kotva pro obnovu přístupu",
-      tt_exp: "Do kdy token platí (admin token je vždy trvalý)" },
+      tt_exp: "Do kdy token platí (admin token je vždy trvalý)",
+      clock_tt: "Aktuální čas (běží)", contacts: "Kontakty", name: "Jméno", role: "Role / oprávnění",
+      active: "Aktivní", invite: "Pozvat", invite_copied: "Odkaz pozvánky zkopírován",
+      invite_hint: "Pozvánka vytvoří odkaz (zkopíruje se do schránky; e-mail se pošle, až bude zapnuté odesílání). Po potvrzení příjemcem vznikne uživatel.",
+      email: "E-mail", first_name: "Jméno", last_name: "Příjmení", password: "Heslo", optional: "nepovinné",
+      accept: "Přijmout pozvánku", accept_ok: "Účet vytvořen. Přihlas se tokenem firmy.",
+      invite_to: "Pozvánka do firmy", bad_invite: "Neplatná nebo prošlá pozvánka",
+      tt_role: "Oprávnění kontaktu (co smí — zakládat požadavky, schvalovat, sledovat…)" },
     en: { app: "HelpDesk", login_p: "Enter your company access token", token_ph: "company token",
       connect: "Connect", tickets: "Tickets", new_ticket: "New ticket", logout: "Log out",
       back: "← Back", number: "No.", title: "Title", status: "Status", priority: "Priority",
@@ -70,7 +77,14 @@
       tt_created: "Ticket creation date and time",
       tt_token: "Company access token — whoever has it logs into that company",
       tt_email: "Admin email — recovery anchor",
-      tt_exp: "Token validity (admin token is always permanent)" },
+      tt_exp: "Token validity (admin token is always permanent)",
+      clock_tt: "Current time (live)", contacts: "Contacts", name: "Name", role: "Role / permission",
+      active: "Active", invite: "Invite", invite_copied: "Invitation link copied",
+      invite_hint: "The invitation creates a link (copied to clipboard; email is sent once sending is enabled). On confirmation a user is created.",
+      email: "Email", first_name: "First name", last_name: "Last name", password: "Password", optional: "optional",
+      accept: "Accept invitation", accept_ok: "Account created. Sign in with the company token.",
+      invite_to: "Invitation to", bad_invite: "Invalid or expired invitation",
+      tt_role: "Contact permission (create requests, approve, watch…)" },
   };
   const t = (k) => (T[state.lang][k] ?? T.cs[k] ?? k);
 
@@ -106,10 +120,21 @@
     el.className = "toast" + (err ? " err" : ""); el.textContent = msg;
     c.appendChild(el); setTimeout(() => el.remove(), 3200);
   }
+  function updateClock() {
+    const el = document.getElementById("hd-clock"); if (!el) return;
+    const d = new Date(), p = (n) => String(n).padStart(2, "0");
+    el.textContent = p(d.getDate()) + "." + p(d.getMonth() + 1) + ". " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
 
   // ---- data ----
   async function boot() {
     try { state.health = await fetch("/api/health").then((r) => r.json()); } catch {}
+    const inviteToken = new URLSearchParams(location.search).get("invite");
+    if (inviteToken) {
+      try { const inv = await fetch("/api/invite?token=" + encodeURIComponent(inviteToken)).then((r) => r.json()); state.invite = inv && !inv.error ? { token: inviteToken, ...inv } : { error: true }; }
+      catch { state.invite = { error: true }; }
+      state.view = "invite"; return render();
+    }
     if (!state.token) { state.view = "login"; return render(); }
     try {
       state.me = await api("/me");
@@ -130,6 +155,9 @@
   }
   async function loadCompanies() {
     state.companies = (await api("/admin/companies")).companies || [];
+  }
+  async function loadContacts() {
+    state.contacts = (await api("/contacts")).contacts || [];
   }
   async function openTicket(id) {
     state.current = await api("/tickets/" + id); state.view = "detail"; render();
@@ -224,13 +252,15 @@
     const ticketsOn = ["list", "detail", "create"].includes(state.view);
     const nav = `${state.env === "admin" ? `<button class="btn ghost sm ${state.view === "admin" ? "on" : ""}" data-act="go-admin">${t("firms")}</button>` : ""}
       <button class="btn ghost sm ${ticketsOn ? "on" : ""}" data-act="go-tickets">${t("env_user")}</button>
-      <button class="btn ghost sm ${state.view === "projects" ? "on" : ""}" data-act="go-projects">${t("projects_nav")}</button>`;
+      <button class="btn ghost sm ${state.view === "projects" ? "on" : ""}" data-act="go-projects">${t("projects_nav")}</button>
+      <button class="btn ghost sm ${state.view === "contacts" ? "on" : ""}" data-act="go-contacts">${t("contacts")}</button>`;
     return `<header class="top"><span class="brand">🎫 ${t("app")}</span>
       ${state.env === "admin" ? `<span class="chip"><span class="dot">●</span> ${t("admin")}</span>` : ""}
       <span class="spacer"></span>
       ${nav}
       <span class="chip ${on ? "" : "off"}"><span class="dot">●</span> ${on ? "AI · " + esc(ai) : "AI off"}</span>
-      <span class="chip" title="commit ${esc((state.health && state.health.commit) || "dev")} · build ${esc((state.health && state.health.built) || "")}">${esc((state.health && state.health.commit) || "dev")}${state.health && state.health.built ? " · " + new Date(state.health.built).toLocaleString(state.lang === "cs" ? "cs-CZ" : "en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</span>
+      <span class="chip mono" id="hd-clock" title="${t("clock_tt")}">--:--:--</span>
+      <span class="chip" title="commit ${esc((state.health && state.health.commit) || "dev")} · build ${esc((state.health && state.health.built) || "")}">${esc((state.health && state.health.commit) || "dev")}</span>
       <button class="btn ghost sm" data-act="theme" title="${t("theme")}">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button>
       <button class="btn ghost sm" data-act="lang">${state.lang.toUpperCase()}</button>
       <button class="btn ghost sm" data-act="logout">${t("logout")}</button></header>`;
@@ -375,12 +405,50 @@
         <th title="${t("tt_key")}">${t("project_key")}</th><th>${t("title")}</th><th title="${t("tt_depth")}">${t("max_depth")}</th><th title="${t("tt_vis")}">${t("visibility_col")}</th><th>${t("actions")}</th>
       </tr></thead><tbody>${rows}</tbody></table></div></main>`;
   }
+  function viewInvite() {
+    const inv = state.invite;
+    if (!inv || inv.error) return `<div class="login"><div class="card"><h1>🎫 ${t("app")}</h1><p style="color:var(--crit)">${t("bad_invite")}</p></div></div>`;
+    return `<div class="login"><div class="card">
+      <h1>🎫 ${t("app")}</h1>
+      <p>${t("invite_to")} <b>${esc(inv.company)}</b> — <span class="mono">${esc(inv.roles || "")}</span></p>
+      <div class="field"><label>${t("email")}</label><input value="${esc(inv.email)}" disabled/></div>
+      <div class="field"><label>${t("first_name")}</label><input id="inv_fn"/></div>
+      <div class="field"><label>${t("last_name")}</label><input id="inv_ln"/></div>
+      <div class="field"><label>${t("password")} (${t("optional")})</label><input id="inv_pw" type="password"/></div>
+      <button class="btn primary" data-act="accept-invite" style="width:100%">${t("accept")}</button>
+    </div></div>`;
+  }
+  function viewContacts() {
+    const roleOpts = ["contact", "approver", "watcher", "pm", "solver", "admin"].map((r) => `<option value="${r}">${r}</option>`).join("");
+    const rows = state.contacts.length ? state.contacts.map((c) => `<tr>
+      <td>${esc(((c.first_name || "") + " " + (c.last_name || "")).trim() || "—")}</td>
+      <td class="mono">${esc(c.email)}</td>
+      <td>${esc(c.role || "—")}</td>
+      <td class="num">${c.active ? "✓" : "—"}</td></tr>`).join("")
+      : `<tr><td colspan="4"><div class="empty">—</div></td></tr>`;
+    return header() + `<main>
+      <div class="toolbar"><h1>${t("contacts")}</h1></div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="toolbar">
+          <input id="inv_email" type="email" placeholder="${t("email")}" style="max-width:260px"/>
+          <select id="inv_role">${roleOpts}</select>
+          <button class="btn primary" data-act="invite">+ ${t("invite")}</button>
+        </div>
+        <p style="margin:8px 0 0;color:var(--muted);font-size:13px">${t("invite_hint")}</p>
+      </div>
+      <div class="tablewrap"><table><thead><tr>
+        <th>${t("name")}</th><th>${t("email")}</th><th title="${t("tt_role")}">${t("role")}</th><th>${t("active")}</th>
+      </tr></thead><tbody>${rows}</tbody></table></div></main>`;
+  }
   function render() {
     app.innerHTML = state.view === "login" ? viewLogin()
+      : state.view === "invite" ? viewInvite()
       : state.view === "admin" ? viewAdmin()
       : state.view === "projects" ? viewProjects()
+      : state.view === "contacts" ? viewContacts()
       : state.view === "create" ? viewCreate()
       : state.view === "detail" ? viewDetail() : viewList();
+    updateClock();
   }
 
   // ---- events ----
@@ -409,6 +477,20 @@
       else if (act === "go-projects") { state.projects = (await api("/projects")).projects || []; state.view = "projects"; render(); }
       else if (act === "projcreate") { await projCreate(); }
       else if (act === "projsave") { await projSave(el.dataset.id); }
+      else if (act === "go-contacts") { await loadContacts(); state.view = "contacts"; render(); }
+      else if (act === "invite") {
+        const email = document.getElementById("inv_email").value.trim(); if (!email) return toast(t("email"), true);
+        const role = document.getElementById("inv_role").value;
+        const r = await api("/invitations", { method: "POST", body: JSON.stringify({ email, role }) });
+        try { await navigator.clipboard.writeText(r.accept_url); toast(t("invite_copied")); } catch { toast(r.accept_url); }
+      }
+      else if (act === "accept-invite") {
+        const body = { token: state.invite.token, first_name: document.getElementById("inv_fn").value.trim(), last_name: document.getElementById("inv_ln").value.trim(), password: document.getElementById("inv_pw").value };
+        const res = await fetch("/api/invite/accept", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return toast(data.error || "Chyba", true);
+        toast(t("accept_ok")); history.replaceState({}, "", location.pathname); state.invite = null; state.view = "login"; render();
+      }
     } catch (err) { toast((err.data && err.data.error) || ("Chyba " + (err.status || "")), true); }
   });
   app.addEventListener("change", async (e) => {
@@ -425,5 +507,6 @@
     }
   });
 
+  setInterval(updateClock, 1000);
   boot();
 })();
