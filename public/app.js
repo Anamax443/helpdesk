@@ -16,7 +16,8 @@
       created: "Vytvořeno", no_tickets: "Žádné tickety", no_msg: "Zatím žádné zprávy",
       project: "Projekt", all_projects: "Všechny projekty", description: "Popis problému",
       create: "Založit ticket", easy: "Easy", extended: "Extended",
-      easy_hint: "Popiš problém vlastními slovy — zařazení a prioritu navrhne AI.",
+      easy_hint: "Popiš problém vlastními slovy — název, zařazení i prioritu dopočítá AI.",
+      easy_ph: "Popište, co se děje, kde a za jakých okolností…",
       request_type: "Typ", importance: "Důležitost", urgency: "Naléhavost",
       product_line: "Produktová řada", functional_area: "Funkční oblast", estimate: "Odhad (h)",
       messages: "Komunikace", add_message: "Přidat zprávu", message_ph: "Napište zprávu…",
@@ -25,14 +26,17 @@
       admin: "Admin", firms: "Firmy", env_user: "Tickety", new_firm: "Nová firma", firm_name: "Název firmy",
       expiry: "Expirace", no_expiry: "bez expirace", token_col: "Token", projects_col: "Projekty",
       actions: "Akce", regen: "Nový token", revoke: "Revokovat", expired: "vypršel", copy: "Kopírovat",
-      copied: "Zkopírováno", m1: "1 měsíc", m6: "6 měsíců", m12: "12 měsíců" },
+      copied: "Zkopírováno", m1: "1 měsíc", m6: "6 měsíců", m12: "12 měsíců", preset: "rychle",
+      projects_nav: "Projekty", new_project: "Nový projekt", project_key: "Klíč", max_depth: "Max. hloubka",
+      visibility_col: "Viditelnost", save: "Uložit" },
     en: { app: "HelpDesk", login_p: "Enter your company access token", token_ph: "company token",
       connect: "Connect", tickets: "Tickets", new_ticket: "New ticket", logout: "Log out",
       back: "← Back", number: "No.", title: "Title", status: "Status", priority: "Priority",
       created: "Created", no_tickets: "No tickets", no_msg: "No messages yet",
       project: "Project", all_projects: "All projects", description: "Problem description",
       create: "Create ticket", easy: "Easy", extended: "Extended",
-      easy_hint: "Describe the problem in your own words — AI suggests category and priority.",
+      easy_hint: "Describe the problem in your own words — AI fills in the title, category and priority.",
+      easy_ph: "Describe what happens, where and under what conditions…",
       request_type: "Type", importance: "Importance", urgency: "Urgency",
       product_line: "Product line", functional_area: "Functional area", estimate: "Estimate (h)",
       messages: "Messages", add_message: "Add message", message_ph: "Write a message…",
@@ -41,7 +45,9 @@
       admin: "Admin", firms: "Companies", env_user: "Tickets", new_firm: "New company", firm_name: "Company name",
       expiry: "Expiry", no_expiry: "no expiry", token_col: "Token", projects_col: "Projects",
       actions: "Actions", regen: "New token", revoke: "Revoke", expired: "expired", copy: "Copy",
-      copied: "Copied", m1: "1 month", m6: "6 months", m12: "12 months" },
+      copied: "Copied", m1: "1 month", m6: "6 months", m12: "12 months", preset: "quick",
+      projects_nav: "Projects", new_project: "New project", project_key: "Key", max_depth: "Max depth",
+      visibility_col: "Visibility", save: "Save" },
   };
   const t = (k) => (T[state.lang][k] ?? T.cs[k] ?? k);
 
@@ -107,16 +113,25 @@
   }
   async function submitCreate() {
     const g = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
-    const body = { project_id: g("c_project"), title: g("c_title"), description: g("c_desc") };
-    if (!body.project_id || !body.title) return toast(t("project") + " + " + t("title"), true);
+    const desc = g("c_desc");
+    if (!desc) return toast(t("description"), true);
+    let body;
     if (state.createMode === "extended") {
+      body = { project_id: g("c_project"), title: g("c_title"), description: desc };
+      if (!body.project_id || !body.title) return toast(t("project") + " + " + t("title"), true);
       body.request_type = g("c_type") || undefined; body.product_line = g("c_pl") || undefined;
       body.functional_area = g("c_fa") || undefined; body.importance = g("c_imp") || undefined;
       body.urgency = g("c_urg") || undefined; body.priority = g("c_prio") || undefined;
       const est = g("c_est"); if (est) body.estimate_hours = parseFloat(est);
+    } else {
+      // Easy: jen popis. Název / zařazení / prioritu dopočítá AI; zatím default projekt + odvozený název.
+      const proj = state.projects[0];
+      if (!proj) return toast(t("project"), true);
+      const title = (desc.split("\n")[0] || desc).slice(0, 60);
+      body = { project_id: proj.id, title, description: desc, easy: true };
     }
     const r = await api("/tickets", { method: "POST", body: JSON.stringify(body) });
-    toast("Ticket #" + r.number); await openTicket(r.id);
+    toast(r.key || ("Ticket #" + r.number)); await openTicket(r.id);
   }
   async function sendMessage() {
     const body = document.getElementById("m_body").value.trim(); if (!body) return;
@@ -137,46 +152,63 @@
   async function adminCreate() {
     const name = document.getElementById("nc_name").value.trim();
     if (!name) return toast(t("firm_name"), true);
-    const days = document.getElementById("nc_exp").value;
-    const r = await api("/admin/companies", { method: "POST", body: JSON.stringify({ name, expires_days: days ? parseInt(days) : null }) });
+    const exp = document.getElementById("nc_expd").value;
+    const r = await api("/admin/companies", { method: "POST", body: JSON.stringify({ name, expires_at: exp || null }) });
     await showToken(r.token); await loadCompanies(); render();
   }
   async function adminRegen(id) {
-    const days = document.getElementById("exp_" + id).value;
-    const r = await api("/admin/companies/" + id + "/token", { method: "POST", body: JSON.stringify({ regenerate: true, expires_days: days ? parseInt(days) : null }) });
+    const exp = document.getElementById("expd_" + id).value;
+    const r = await api("/admin/companies/" + id + "/token", { method: "POST", body: JSON.stringify({ regenerate: true, expires_at: exp || null }) });
     await showToken(r.token); await loadCompanies(); render();
   }
   async function adminExpiry(id) {
-    const days = document.getElementById("exp_" + id).value;
-    await api("/admin/companies/" + id + "/token", { method: "POST", body: JSON.stringify({ expires_days: days ? parseInt(days) : null }) });
+    const exp = document.getElementById("expd_" + id).value;
+    await api("/admin/companies/" + id + "/token", { method: "POST", body: JSON.stringify({ expires_at: exp || null }) });
     toast(t("expiry")); await loadCompanies(); render();
   }
   async function adminRevoke(id) {
     await api("/admin/companies/" + id + "/revoke", { method: "POST" });
     toast(t("revoke")); await loadCompanies(); render();
   }
+  async function projCreate() {
+    const name = document.getElementById("np_name").value.trim(); if (!name) return toast(t("title"), true);
+    const key = document.getElementById("np_key").value.trim();
+    const depth = parseInt(document.getElementById("np_depth").value) || 5;
+    const vis = document.getElementById("np_vis").value;
+    await api("/projects", { method: "POST", body: JSON.stringify({ name, key, max_depth: depth, default_visibility: vis }) });
+    state.projects = (await api("/projects")).projects || []; render();
+  }
+  async function projSave(id) {
+    const name = document.getElementById("pn_" + id).value.trim();
+    const key = document.getElementById("pk_" + id).value.trim();
+    const depth = parseInt(document.getElementById("pd_" + id).value) || 5;
+    const vis = document.getElementById("pv_" + id).value;
+    await api("/projects/" + id, { method: "POST", body: JSON.stringify({ name, key, max_depth: depth, default_visibility: vis }) });
+    toast(t("save")); state.projects = (await api("/projects")).projects || []; render();
+  }
 
   // ---- views ----
   function header() {
     const ai = state.health && state.health.ai, on = ai && ai !== "off";
-    const adminNav = state.env === "admin"
-      ? `<button class="btn ghost sm ${state.view === "admin" ? "on" : ""}" data-act="go-admin">${t("firms")}</button>
-         <button class="btn ghost sm ${state.view !== "admin" ? "on" : ""}" data-act="go-tickets">${t("env_user")}</button>`
-      : "";
+    const ticketsOn = ["list", "detail", "create"].includes(state.view);
+    const nav = `${state.env === "admin" ? `<button class="btn ghost sm ${state.view === "admin" ? "on" : ""}" data-act="go-admin">${t("firms")}</button>` : ""}
+      <button class="btn ghost sm ${ticketsOn ? "on" : ""}" data-act="go-tickets">${t("env_user")}</button>
+      <button class="btn ghost sm ${state.view === "projects" ? "on" : ""}" data-act="go-projects">${t("projects_nav")}</button>`;
     return `<header class="top"><span class="brand">🎫 ${t("app")}</span>
       ${state.env === "admin" ? `<span class="chip"><span class="dot">●</span> ${t("admin")}</span>` : ""}
       <span class="spacer"></span>
-      ${adminNav}
+      ${nav}
       <span class="chip ${on ? "" : "off"}"><span class="dot">●</span> ${on ? "AI · " + esc(ai) : "AI off"}</span>
       <button class="btn ghost sm" data-act="lang">${state.lang.toUpperCase()}</button>
       <button class="btn ghost sm" data-act="logout">${t("logout")}</button></header>`;
   }
   function viewAdmin() {
-    const expSel = (id) => `<select id="${id}" style="max-width:150px">
-      <option value="">${t("no_expiry")}</option>
+    const presetSel = (target) => `<select data-change="preset" data-target="${target}" title="${t("preset")}" style="max-width:118px">
+      <option value="">${t("preset")}</option>
       <option value="30">${t("m1")}</option>
       <option value="180">${t("m6")}</option>
       <option value="365">${t("m12")}</option></select>`;
+    const dateInput = (id, ts) => `<input type="date" id="${id}" value="${ts ? new Date(ts * 1000).toISOString().slice(0, 10) : ""}" title="${t("expiry")}" style="max-width:150px"/>`;
     const rows = state.companies.map((c) => {
       const exp = !c.token_expires ? t("no_expiry")
         : (c.token_expires * 1000 < Date.now()
@@ -187,7 +219,7 @@
         <td class="mono" data-act="copy" data-tok="${esc(c.token || "")}" title="${t("copy")}" style="cursor:pointer">${esc((c.token || "").slice(0, 10))}…</td>
         <td>${exp}</td>
         <td class="num">${c.projects}</td>
-        <td><div class="rowacts">${expSel("exp_" + c.id)}
+        <td><div class="rowacts">${dateInput("expd_" + c.id, c.token_expires)}${presetSel("expd_" + c.id)}
           <button class="btn sm" data-act="setexp" data-id="${esc(c.id)}">${t("apply")}</button>
           <button class="btn sm" data-act="regen" data-id="${esc(c.id)}">${t("regen")}</button>
           <button class="btn sm" data-act="revoke" data-id="${esc(c.id)}">${t("revoke")}</button></div></td></tr>`;
@@ -195,8 +227,8 @@
     return header() + `<main>
       <div class="toolbar"><h1>${t("firms")}</h1></div>
       <div class="card" style="margin-bottom:16px"><div class="toolbar">
-        <input id="nc_name" placeholder="${t("firm_name")}" style="max-width:280px"/>
-        ${expSel("nc_exp")}
+        <input id="nc_name" placeholder="${t("firm_name")}" style="max-width:240px"/>
+        ${dateInput("nc_expd", null)}${presetSel("nc_expd")}
         <button class="btn primary" data-act="admincreate">+ ${t("new_firm")}</button>
       </div></div>
       <div class="tablewrap"><table><thead><tr>
@@ -216,7 +248,7 @@
       .concat(state.projects.map((p) => `<option value="${esc(p.id)}" ${p.id === state.filterProject ? "selected" : ""}>${esc(p.name)}</option>`)).join("");
     const rows = state.tickets.length
       ? state.tickets.map((x) => `<tr data-act="open" data-id="${esc(x.id)}">
-          <td class="num">#${x.number ?? ""}</td><td>${esc(x.title)}</td>
+          <td class="num">${esc(x.ticket_key || "#" + (x.number ?? ""))}</td><td>${esc(x.title)}</td>
           <td><span class="pill s-${x.status}">${statusLabel(x.status)}</span></td>
           <td>${x.priority ? `<span class="pill p-${x.priority}">${prioLabel(x.priority)}</span>` : ""}</td>
           <td class="num">${fmtDate(x.created_at)}</td></tr>`).join("")
@@ -240,11 +272,11 @@
         <span class="spacer"></span>
         <span class="seg"><button data-act="mode" data-mode="easy" class="${ext ? "" : "on"}">${t("easy")}</button><button data-act="mode" data-mode="extended" class="${ext ? "on" : ""}">${t("extended")}</button></span></div>
       <div class="card">
-        ${ext ? "" : `<p style="margin-top:0;color:var(--muted)">${t("easy_hint")}</p>`}
+        ${ext ? `
         <div class="field"><label>${t("project")} *</label><select id="c_project">${projOpts}</select></div>
         <div class="field"><label>${t("title")} *</label><input id="c_title"/></div>
         <div class="field"><label>${t("description")} *</label><textarea id="c_desc"></textarea></div>
-        ${ext ? `<div class="grid2">
+        <div class="grid2">
           ${fld("c_type", t("request_type"), o(state.meta.request_types || []))}
           ${fld("c_prio", t("priority"), prioOpts)}
           ${fld("c_imp", t("importance"), o(["normal", "high", "critical"]))}
@@ -252,7 +284,9 @@
           <div class="field"><label>${t("product_line")}</label><input id="c_pl"/></div>
           <div class="field"><label>${t("functional_area")}</label><input id="c_fa"/></div>
           <div class="field"><label>${t("estimate")}</label><input id="c_est" type="number" step="0.5"/></div>
-        </div>` : ""}
+        </div>` : `
+        <p style="margin-top:0;color:var(--muted)">${t("easy_hint")}</p>
+        <div class="field"><label>${t("description")} *</label><textarea id="c_desc" style="min-height:170px" placeholder="${t("easy_ph")}"></textarea></div>`}
         <button class="btn primary" data-act="create">${t("create")}</button>
       </div></main>`;
   }
@@ -261,7 +295,7 @@
     const allowed = (state.meta.transitions[i.status] || []);
     const sOpts = ['<option value="">' + t("change_status") + "…</option>"]
       .concat(allowed.map((s) => `<option value="${s}">${statusLabel(s)}</option>`)).join("");
-    const rows = [["#", "#" + (i.number ?? "")], [t("status"), `<span class="pill s-${i.status}">${statusLabel(i.status)}</span>`],
+    const rows = [["#", esc(i.ticket_key || "#" + (i.number ?? ""))], [t("status"), `<span class="pill s-${i.status}">${statusLabel(i.status)}</span>`],
       [t("priority"), i.priority ? `<span class="pill p-${i.priority}">${prioLabel(i.priority)}</span>` : t("none")],
       [t("request_type"), esc(i.request_type || t("none"))], [t("product_line"), esc(i.product_line || t("none"))],
       [t("functional_area"), esc(i.functional_area || t("none"))], [t("created"), fmtDate(i.created_at)]];
@@ -273,7 +307,7 @@
       : `<div class="empty">${t("no_msg")}</div>`;
     return header() + `<main>
       <div class="toolbar"><button class="btn ghost" data-act="goto-list">${t("back")}</button>
-        <h1><span class="mono" style="color:var(--muted)">#${i.number ?? ""}</span> ${esc(i.title)}</h1></div>
+        <h1><span class="mono" style="color:var(--muted)">${esc(i.ticket_key || "#" + (i.number ?? ""))}</span> ${esc(i.title)}</h1></div>
       <div class="card"><div class="meta-grid">${metaHtml}</div>
         ${i.description ? `<div style="margin-top:8px"><div class="k">${t("description")}</div><div>${esc(i.description)}</div></div>` : ""}
         ${allowed.length ? `<div class="toolbar" style="margin-top:16px"><select id="s_to" style="max-width:240px">${sOpts}</select><button class="btn" data-act="status">${t("apply")}</button></div>` : ""}
@@ -284,9 +318,31 @@
         <div class="toolbar"><select id="m_vis" style="max-width:200px"><option value="shared">${t("shared")}</option><option value="internal">${t("internal")}</option></select><button class="btn primary" data-act="send">${t("send")}</button></div>
       </div></main>`;
   }
+  function viewProjects() {
+    const visSel = (id, cur) => `<select id="${id}"><option value="shared" ${cur === "shared" ? "selected" : ""}>${t("shared")}</option><option value="internal" ${cur === "internal" ? "selected" : ""}>${t("internal")}</option></select>`;
+    const rows = state.projects.map((p) => `<tr>
+      <td><input id="pk_${p.id}" value="${esc(p.key || "")}" class="mono" style="max-width:90px"/></td>
+      <td><input id="pn_${p.id}" value="${esc(p.name)}" style="max-width:220px"/></td>
+      <td><input id="pd_${p.id}" type="number" min="1" max="20" value="${p.max_depth}" style="max-width:70px"/></td>
+      <td>${visSel("pv_" + p.id, p.default_visibility)}</td>
+      <td><button class="btn sm" data-act="projsave" data-id="${esc(p.id)}">${t("save")}</button></td></tr>`).join("");
+    return header() + `<main>
+      <div class="toolbar"><h1>${t("projects_nav")}</h1></div>
+      <div class="card" style="margin-bottom:16px"><div class="toolbar">
+        <input id="np_name" placeholder="${t("title")}" style="max-width:220px"/>
+        <input id="np_key" placeholder="${t("project_key")}" class="mono" style="max-width:110px"/>
+        <input id="np_depth" type="number" min="1" max="20" value="5" title="${t("max_depth")}" style="max-width:80px"/>
+        ${visSel("np_vis", "shared")}
+        <button class="btn primary" data-act="projcreate">+ ${t("new_project")}</button>
+      </div></div>
+      <div class="tablewrap"><table><thead><tr>
+        <th>${t("project_key")}</th><th>${t("title")}</th><th>${t("max_depth")}</th><th>${t("visibility_col")}</th><th>${t("actions")}</th>
+      </tr></thead><tbody>${rows}</tbody></table></div></main>`;
+  }
   function render() {
     app.innerHTML = state.view === "login" ? viewLogin()
       : state.view === "admin" ? viewAdmin()
+      : state.view === "projects" ? viewProjects()
       : state.view === "create" ? viewCreate()
       : state.view === "detail" ? viewDetail() : viewList();
   }
@@ -313,11 +369,19 @@
       else if (act === "setexp") { await adminExpiry(el.dataset.id); }
       else if (act === "revoke") { await adminRevoke(el.dataset.id); }
       else if (act === "copy") { try { await navigator.clipboard.writeText(el.dataset.tok); toast(t("copied")); } catch {} }
+      else if (act === "go-projects") { state.projects = (await api("/projects")).projects || []; state.view = "projects"; render(); }
+      else if (act === "projcreate") { await projCreate(); }
+      else if (act === "projsave") { await projSave(el.dataset.id); }
     } catch (err) { toast((err.data && err.data.error) || ("Chyba " + (err.status || "")), true); }
   });
   app.addEventListener("change", async (e) => {
     const el = e.target.closest("[data-change]"); if (!el) return;
     if (el.dataset.change === "filter") { state.filterProject = el.value; await loadTickets(); }
+    else if (el.dataset.change === "preset") {
+      const target = document.getElementById(el.dataset.target);
+      if (target) target.value = el.value ? new Date(Date.now() + parseInt(el.value) * 86400000).toISOString().slice(0, 10) : "";
+      el.value = "";
+    }
   });
 
   boot();

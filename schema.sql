@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS project (
   id                 TEXT PRIMARY KEY,
   company_id         TEXT NOT NULL REFERENCES company(id),
   name               TEXT NOT NULL,
+  key                TEXT,                          -- JIRA-style prefix (napr. IT, AX) -> IT-270
   manager_id         TEXT REFERENCES user(id),
   max_depth          INTEGER NOT NULL DEFAULT 5,
   default_visibility TEXT NOT NULL DEFAULT 'shared',  -- shared | internal

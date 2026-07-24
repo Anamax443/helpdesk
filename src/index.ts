@@ -66,9 +66,9 @@ async function notify(_env: Env, event: string, payload: Record<string, unknown>
 async function listTickets(env: Env, company: any, url: URL): Promise<Response> {
   const project = url.searchParams.get("project");
   const sql = project
-    ? `SELECT i.* FROM issue i JOIN project p ON p.id = i.project_id
+    ? `SELECT i.*, (COALESCE(p.key, UPPER(SUBSTR(p.name, 1, 3))) || '-' || i.number) AS ticket_key FROM issue i JOIN project p ON p.id = i.project_id
        WHERE p.company_id = ? AND i.project_id = ? ORDER BY i.created_at DESC LIMIT 200`
-    : `SELECT i.* FROM issue i JOIN project p ON p.id = i.project_id
+    : `SELECT i.*, (COALESCE(p.key, UPPER(SUBSTR(p.name, 1, 3))) || '-' || i.number) AS ticket_key FROM issue i JOIN project p ON p.id = i.project_id
        WHERE p.company_id = ? ORDER BY i.created_at DESC LIMIT 200`;
   const stmt = project
     ? env.DB.prepare(sql).bind(company.id, project)
@@ -79,12 +79,41 @@ async function listTickets(env: Env, company: any, url: URL): Promise<Response> 
 
 async function listProjects(env: Env, company: any): Promise<Response> {
   const { results } = await env.DB.prepare(
-    `SELECT id, name, manager_id, max_depth, default_visibility FROM project
+    `SELECT id, name, key, manager_id, max_depth, default_visibility FROM project
      WHERE company_id = ? ORDER BY name`,
   )
     .bind(company.id)
     .all();
   return json({ projects: results });
+}
+
+function normKey(s: string): string {
+  return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+}
+async function createProject(env: Env, company: any, req: Request): Promise<Response> {
+  const b = (await req.json().catch(() => ({}))) as Record<string, any>;
+  if (!b.name) return json({ error: "název je povinný" }, 400);
+  const id = uuid();
+  const key = normKey(b.key || b.name.slice(0, 3)) || "PRJ";
+  await env.DB.prepare(
+    `INSERT INTO project (id, company_id, name, key, max_depth, default_visibility, created_at)
+     VALUES (?,?,?,?,?,?,?)`,
+  ).bind(id, company.id, b.name, key, Number(b.max_depth) || 5,
+    b.default_visibility === "internal" ? "internal" : "shared", now()).run();
+  await audit(env, null, "project.create", "project", id, null, { name: b.name, key });
+  return json({ id, name: b.name, key }, 201);
+}
+async function updateProject(env: Env, company: any, id: string, req: Request): Promise<Response> {
+  const pr = await env.DB.prepare(`SELECT id FROM project WHERE id = ? AND company_id = ?`).bind(id, company.id).first();
+  if (!pr) return json({ error: "projekt nenalezen" }, 404);
+  const b = (await req.json().catch(() => ({}))) as Record<string, any>;
+  const key = b.key ? normKey(b.key) : null;
+  await env.DB.prepare(
+    `UPDATE project SET name = COALESCE(?, name), key = COALESCE(?, key),
+       max_depth = COALESCE(?, max_depth), default_visibility = COALESCE(?, default_visibility) WHERE id = ?`,
+  ).bind(b.name ?? null, key, b.max_depth != null ? Number(b.max_depth) : null, b.default_visibility ?? null, id).run();
+  await audit(env, null, "project.update", "project", id, null, b);
+  return json({ id, ok: true });
 }
 
 async function listRetention(env: Env, company: any): Promise<Response> {
@@ -129,6 +158,17 @@ function genToken(): string {
   return "hd_" + s;
 }
 
+/** Expirace tokenu: expires_at (konkrétní datum ISO / timestamp) má přednost před expires_days (relativní). */
+function parseExpiry(b: Record<string, any>): number | null {
+  if (b.expires_at != null && b.expires_at !== "") {
+    const s = String(b.expires_at);
+    const ms = s.length <= 10 ? Date.parse(s + "T23:59:59Z") : Date.parse(s);
+    return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+  }
+  if (b.expires_days != null && b.expires_days !== "") return now() + Number(b.expires_days) * 86400;
+  return null;
+}
+
 /** Prostředí odvozené z tokenu — sem přibude případné další (rozšiřitelné). */
 function envForCompany(company: any): string {
   return company.is_provider === 1 ? "admin" : "user";
@@ -148,7 +188,7 @@ async function createCompany(env: Env, req: Request): Promise<Response> {
   if (!b.name) return json({ error: "název je povinný" }, 400);
   const id = uuid();
   const token = genToken();
-  const expires = b.expires_days ? now() + Number(b.expires_days) * 86400 : null;
+  const expires = parseExpiry(b);
   await env.DB.prepare(
     `INSERT INTO company (id, name, token, token_expires, is_provider, default_language, created_at)
      VALUES (?,?,?,?,0,'cs',?)`,
@@ -161,7 +201,7 @@ async function setCompanyToken(env: Env, id: string, req: Request): Promise<Resp
   const c = await env.DB.prepare(`SELECT id FROM company WHERE id = ?`).bind(id).first();
   if (!c) return json({ error: "firma nenalezena" }, 404);
   const b = (await req.json().catch(() => ({}))) as Record<string, any>;
-  const expires = b.expires_days == null ? null : now() + Number(b.expires_days) * 86400;
+  const expires = parseExpiry(b);
   let token: string | null = null;
   if (b.regenerate) {
     token = genToken();
@@ -202,11 +242,11 @@ async function createTicket(env: Env, company: any, req: Request): Promise<Respo
   }
 
   const numRow = await env.DB.prepare(
-    `SELECT COALESCE(MAX(number), 0) + 1 AS n FROM issue i
-     JOIN project p ON p.id = i.project_id WHERE p.company_id = ?`,
+    `SELECT COALESCE(MAX(number), 0) + 1 AS n FROM issue WHERE project_id = ?`,
   )
-    .bind(company.id)
+    .bind(b.project_id)
     .first<{ n: number }>();
+  const num = numRow?.n ?? 1;
 
   const id = uuid();
   const t = now();
@@ -219,7 +259,7 @@ async function createTicket(env: Env, company: any, req: Request): Promise<Respo
   )
     .bind(
       id,
-      numRow?.n ?? 1,
+      num,
       b.parent_id ?? null,
       b.project_id,
       b.type ?? "task",
@@ -243,14 +283,15 @@ async function createTicket(env: Env, company: any, req: Request): Promise<Respo
     )
     .run();
 
+  const pkey = String((proj as any).key || (proj as any).name.slice(0, 3)).toUpperCase();
   await audit(env, b.author_id ?? null, "issue.create", "issue", id, null, { title: b.title });
   await notify(env, "ticket.created", { id, title: b.title });
-  return json({ id, number: numRow?.n ?? 1, status: "new" }, 201);
+  return json({ id, number: num, key: pkey + "-" + num, status: "new" }, 201);
 }
 
 async function getTicket(env: Env, company: any, id: string): Promise<Response> {
   const issue = await env.DB.prepare(
-    `SELECT i.* FROM issue i JOIN project p ON p.id = i.project_id
+    `SELECT i.*, (COALESCE(p.key, UPPER(SUBSTR(p.name, 1, 3))) || '-' || i.number) AS ticket_key FROM issue i JOIN project p ON p.id = i.project_id
      WHERE i.id = ? AND p.company_id = ?`,
   )
     .bind(id, company.id)
@@ -266,7 +307,7 @@ async function getTicket(env: Env, company: any, id: string): Promise<Response> 
 
 async function addMessage(env: Env, company: any, id: string, req: Request): Promise<Response> {
   const issue = await env.DB.prepare(
-    `SELECT i.* FROM issue i JOIN project p ON p.id = i.project_id
+    `SELECT i.*, (COALESCE(p.key, UPPER(SUBSTR(p.name, 1, 3))) || '-' || i.number) AS ticket_key FROM issue i JOIN project p ON p.id = i.project_id
      WHERE i.id = ? AND p.company_id = ?`,
   )
     .bind(id, company.id)
@@ -338,7 +379,7 @@ async function changeStatusInternal(
 
 async function changeStatus(env: Env, company: any, id: string, req: Request): Promise<Response> {
   const issue = await env.DB.prepare(
-    `SELECT i.* FROM issue i JOIN project p ON p.id = i.project_id
+    `SELECT i.*, (COALESCE(p.key, UPPER(SUBSTR(p.name, 1, 3))) || '-' || i.number) AS ticket_key FROM issue i JOIN project p ON p.id = i.project_id
      WHERE i.id = ? AND p.company_id = ?`,
   )
     .bind(id, company.id)
@@ -377,6 +418,9 @@ export default {
 
       try {
         if (p === "/api/projects" && req.method === "GET") return await listProjects(env, company);
+        if (p === "/api/projects" && req.method === "POST") return await createProject(env, company, req);
+        const pm = p.match(/^\/api\/projects\/([^/]+)$/);
+        if (pm && req.method === "POST") return await updateProject(env, company, pm[1], req);
         if (p === "/api/meta" && req.method === "GET")
           return json({
             statuses: STATUS,
