@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.4 — 2026-07-24 · Bezpečnost adminu, verze, dark mode
+- Admin (provider) token **neexpiruje** (backend vynucuje null); regenerace vlastního = **bezešvá výměna session**; blok revokace sebe sama.
+- `recovery_email` admina (migrace 0003) — **auto-save** při odchodu z pole (`POST /api/admin/companies/:id/email`).
+- **Verze v hlavičce**: commit + čas buildu (`scripts/gen-version.mjs` → `/api/health`), tooltip s časem.
+- **Dark mode** přepínač (`data-theme`, uloženo v prohlížeči; ruční volba přebije OS).
+- TODO: vydání tokenu až po **ověření e-mailu** (u admina klik na odkaz) — čeká na e-mailový modul.
+
 ## v0.1.3 — 2026-07-24 · JIRA klíče, Projekty, Easy
 - Alfanumerická čísla ticketů (JIRA-style): `project.key` (prefix) + per-projekt číslování → `IT-270`.
   `ticket_key` počítán z klíče projektu → přejmenování klíče přepíše všechny tickety. Migrace `0002`.

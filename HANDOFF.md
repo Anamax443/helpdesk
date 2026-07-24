@@ -25,6 +25,7 @@ src/index.ts          Worker: router + API (me, tickets, messages, status, reten
 src/types.ts          Env + stavy + povolené přechody
 src/token.ts          HMAC pozvánkové tokeny
 src/retention.ts      Vynucení retenční politiky (GDPR) — anonymizace/smazání
+src/version.ts        GENEROVANÝ (scripts/gen-version.mjs při predeploy/predev; gitignored) — commit+build
 src/do.ts             TicketRoom Durable Object (živý kanál)
 migrations/           0001_retention.sql (legal_hold + retention_policy)
 public/               SPA — login tokenem (routing admin/user), tickety (JIRA klíče), Projekty, Firmy (admin), Easy/Extended
@@ -49,6 +50,7 @@ docs/                 prezentace.html, manazersky-vystup.html, STATUS(.en).md
 - [x] **Retenční politika (GDPR)** — per-firma politika + legal-hold + denní cron `0 3 * * *`; ověřeno (anonymizace jen ticketů bez holdu) + nasazeno
 - [x] **Admin konzole (provider)** — jednotný login, routing dle tokenu (admin/user), správa firem + tokenů (generování / expirace / revokace); ověřeno + nasazeno
 - [x] **JIRA klíče + Projekty + Easy** — alfanumerická čísla ticketů (IT-270, per-projekt), sekce Projekty (podmínky projektu), Easy mód = jen popis (AI dopočítá zbytek); ověřeno + nasazeno
+- [x] **Bezpečnost adminu + verze + dark mode** — admin token trvalý (neexpiruje), bezešvá výměna vlastního tokenu, recovery e-mail (auto-save), commit+čas buildu v hlavičce (`gen-version.mjs`), přepínač motivu (data-theme)
 - [x] Dokumentace CS+EN, prezentace, manažerský výstup
 - [x] **Produkční nasazení** — živě na helpdesk.maxferit.cz (custom doména + workers.dev), remote D1 + secret nastaveny
 - [ ] Další moduly: AI vrstva (`src/ai.ts`), rozpočet/schvalování, Gantt/Kanban/KPI, pozvánky, e-mail (teď stub)
