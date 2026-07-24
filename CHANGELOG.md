@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.1 — 2026-07-24 · Retence (GDPR)
+- Retenční politika per firma (`retention_policy`): kategorie × doba uchování × akce (anonymize/delete); opt-in.
+- `issue.legal_hold` — vynětí ticketu z retence (spor/litigace).
+- Vynucení naplánovaným cronem (`0 3 * * *`) — `enforceRetention()` v `src/retention.ts` + scheduled handler.
+- API: `GET/POST /api/retention`, `POST /api/tickets/:id/hold`. Migrace `migrations/0001_retention.sql`.
+- Ověřeno lokálně (anonymizace uzavřeného ticketu bez holdu; ticket s holdem nedotčen) + nasazeno.
+
 ## v0.1 — 2026-07-24
 Jádro + frontend, ověřeno lokálně.
 

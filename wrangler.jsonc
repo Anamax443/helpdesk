@@ -40,6 +40,9 @@
     { "tag": "v1", "new_sqlite_classes": ["TicketRoom"] }
   ],
 
+  // Denní vynucení retenční politiky (GDPR) — scheduled handler enforceRetention().
+  "triggers": { "crons": ["0 3 * * *"] },
+
   // Workers AI (default free vrstva: triage, embeddings, překlad).
   "ai": { "binding": "AI" },
 

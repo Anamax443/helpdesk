@@ -20,10 +20,13 @@ https://claude.ai/code/artifact/efc9654c-c8f4-45e4-b7de-325fc11e6365
 ## Struktura
 ```
 schema.sql            D1 model (15 tabulek)
-src/index.ts          Worker: router + API (health, projects, meta, tickets, messages, status)
+src/index.ts          Worker: router + API (tickets, messages, status, retention, legal-hold)
+                      + scheduled cron (retence)
 src/types.ts          Env + stavy + povolené přechody
 src/token.ts          HMAC pozvánkové tokeny
+src/retention.ts      Vynucení retenční politiky (GDPR) — anonymizace/smazání
 src/do.ts             TicketRoom Durable Object (živý kanál)
+migrations/           0001_retention.sql (legal_hold + retention_policy)
 public/               SPA (index.html, app.css, app.js) — login tokenem, seznam, Easy/Extended, detail
 docs/                 prezentace.html, manazersky-vystup.html, STATUS(.en).md
 ```
@@ -43,6 +46,7 @@ docs/                 prezentace.html, manazersky-vystup.html, STATUS(.en).md
 - [x] Worker jádro: health, projects, meta, list/create/get ticketu, zprávy, změna stavu (validace přechodů), audit, DO
 - [x] **Frontend SPA** — login tokenem, seznam, Easy/Extended zakládání, detail + vlákna + přechody, i18n CS/EN
 - [x] **Verify-core** — `tsc` 0 chyb + lokální `wrangler dev` smoke test prošel (create/message/status + guardy 400/401)
+- [x] **Retenční politika (GDPR)** — per-firma politika + legal-hold + denní cron `0 3 * * *`; ověřeno (anonymizace jen ticketů bez holdu) + nasazeno
 - [x] Dokumentace CS+EN, prezentace, manažerský výstup
 - [x] **Produkční nasazení** — živě na helpdesk.maxferit.cz (custom doména + workers.dev), remote D1 + secret nastaveny
 - [ ] Další moduly: AI vrstva (`src/ai.ts`), rozpočet/schvalování, Gantt/Kanban/KPI, pozvánky, e-mail (teď stub)

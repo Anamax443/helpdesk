@@ -2,6 +2,7 @@
 // Rozšíření (Gantt/Kanban/KPI/AI/rozpočet) se nabalují na tuhle kostru.
 
 import { Env, STATUS, TRANSITIONS, Status } from "./types";
+import { enforceRetention } from "./retention";
 
 export { TicketRoom } from "./do";
 
@@ -84,6 +85,40 @@ async function listProjects(env: Env, company: any): Promise<Response> {
     .bind(company.id)
     .all();
   return json({ projects: results });
+}
+
+async function listRetention(env: Env, company: any): Promise<Response> {
+  const { results } = await env.DB.prepare(
+    `SELECT category, months, action FROM retention_policy WHERE company_id = ? ORDER BY category`,
+  ).bind(company.id).all();
+  return json({ policies: results });
+}
+
+async function setRetention(env: Env, company: any, req: Request): Promise<Response> {
+  const b = (await req.json().catch(() => ({}))) as Record<string, any>;
+  const cats = ["closed_tickets", "audit_log", "attachments", "inactive_users"];
+  if (!cats.includes(b.category)) return json({ error: "neplatná kategorie" }, 400);
+  const action = b.action === "delete" ? "delete" : "anonymize";
+  const months = b.months == null || b.months === "" ? null : parseInt(String(b.months), 10);
+  await env.DB.prepare(
+    `INSERT INTO retention_policy (id, company_id, category, months, action, created_at)
+     VALUES (?,?,?,?,?,?)
+     ON CONFLICT(company_id, category) DO UPDATE SET months = excluded.months, action = excluded.action`,
+  ).bind(uuid(), company.id, b.category, months, action, now()).run();
+  await audit(env, null, "retention.set", "company", company.id, null, { category: b.category, months, action });
+  return json({ ok: true, category: b.category, months, action });
+}
+
+async function setHold(env: Env, company: any, id: string, req: Request): Promise<Response> {
+  const issue = await env.DB.prepare(
+    `SELECT i.legal_hold FROM issue i JOIN project p ON p.id = i.project_id WHERE i.id = ? AND p.company_id = ?`,
+  ).bind(id, company.id).first<{ legal_hold: number }>();
+  if (!issue) return json({ error: "ticket nenalezen" }, 404);
+  const b = (await req.json().catch(() => ({}))) as Record<string, any>;
+  const hold = b.hold ? 1 : 0;
+  await env.DB.prepare(`UPDATE issue SET legal_hold = ? WHERE id = ?`).bind(hold, id).run();
+  await audit(env, b.actor_id ?? null, "issue.legal_hold", "issue", id, { legal_hold: issue.legal_hold }, { legal_hold: hold });
+  return json({ id, legal_hold: hold });
 }
 
 async function createTicket(env: Env, company: any, req: Request): Promise<Response> {
@@ -291,15 +326,18 @@ export default {
             priorities: ["blocking", "critical", "high", "low"],
             request_types: ["request", "complaint"],
           });
+        if (p === "/api/retention" && req.method === "GET") return await listRetention(env, company);
+        if (p === "/api/retention" && req.method === "POST") return await setRetention(env, company, req);
         if (p === "/api/tickets" && req.method === "GET") return await listTickets(env, company, url);
         if (p === "/api/tickets" && req.method === "POST") return await createTicket(env, company, req);
 
-        const m = p.match(/^\/api\/tickets\/([^/]+)(\/messages|\/status)?$/);
+        const m = p.match(/^\/api\/tickets\/([^/]+)(\/messages|\/status|\/hold)?$/);
         if (m) {
           const id = m[1];
           if (!m[2] && req.method === "GET") return await getTicket(env, company, id);
           if (m[2] === "/messages" && req.method === "POST") return await addMessage(env, company, id, req);
           if (m[2] === "/status" && req.method === "POST") return await changeStatus(env, company, id, req);
+          if (m[2] === "/hold" && req.method === "POST") return await setHold(env, company, id, req);
         }
       } catch (e: any) {
         return json({ error: "server", detail: String(e?.message ?? e) }, 500);
@@ -309,5 +347,10 @@ export default {
 
     // vše ostatní = statické SPA
     return env.ASSETS.fetch(req);
+  },
+
+  // Naplánované vynucení retenční politiky (GDPR) — viz wrangler.jsonc triggers.crons.
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(enforceRetention(env).then((r) => console.log("retention", JSON.stringify(r))));
   },
 };

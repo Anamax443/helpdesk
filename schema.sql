@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS issue (
   forecasted_realization TEXT,
   sla_due                INTEGER,               -- unix s (response/resolution per SLA model)
   sla_breached           INTEGER NOT NULL DEFAULT 0,
+  legal_hold             INTEGER NOT NULL DEFAULT 0,  -- vynato z retence (spor/litigace)
   created_at             INTEGER NOT NULL,
   updated_at             INTEGER NOT NULL
 );
@@ -171,6 +172,17 @@ CREATE TABLE IF NOT EXISTS sla_policy (
   created_at      INTEGER NOT NULL
 );
 
+-- Retencni politika per firma (GDPR): jak dlouho se drzi, pak anonymizace/smazani.
+CREATE TABLE IF NOT EXISTS retention_policy (
+  id         TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES company(id),
+  category   TEXT NOT NULL,                     -- closed_tickets | audit_log | attachments | inactive_users
+  months     INTEGER,                           -- retention period; NULL = keep forever (no purge)
+  action     TEXT NOT NULL DEFAULT 'anonymize', -- anonymize | delete
+  created_at INTEGER NOT NULL,
+  UNIQUE(company_id, category)
+);
+
 -- === AI layer + audit + KPI ===
 -- AI suggestions: nothing auto-applied, human confirms (status), fully auditable.
 CREATE TABLE IF NOT EXISTS ai_suggestion (
@@ -224,3 +236,4 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity     ON audit_log(entity_type, entity
 CREATE INDEX IF NOT EXISTS idx_audit_at         ON audit_log(at);
 CREATE INDEX IF NOT EXISTS idx_invitation_token ON invitation(token);
 CREATE INDEX IF NOT EXISTS idx_invitation_email ON invitation(email);
+CREATE INDEX IF NOT EXISTS idx_retention_company ON retention_policy(company_id);
