@@ -3,6 +3,7 @@
 
 import { Env, STATUS, TRANSITIONS, Status } from "./types";
 import { enforceRetention } from "./retention";
+import { VERSION } from "./version";
 
 export { TicketRoom } from "./do";
 
@@ -223,6 +224,16 @@ async function revokeCompany(env: Env, id: string): Promise<Response> {
   await audit(env, null, "company.revoke", "company", id, null, null);
   return json({ id, revoked: true });
 }
+// Samostatné uložení e-mailu admina (netýká se tokenu ani expirace).
+async function setCompanyEmail(env: Env, id: string, req: Request): Promise<Response> {
+  const c = await env.DB.prepare(`SELECT id FROM company WHERE id = ?`).bind(id).first();
+  if (!c) return json({ error: "firma nenalezena" }, 404);
+  const b = (await req.json().catch(() => ({}))) as Record<string, any>;
+  const email = (b.email || "").toString().trim() || null;
+  await env.DB.prepare(`UPDATE company SET recovery_email = ? WHERE id = ?`).bind(email, id).run();
+  await audit(env, null, "company.email", "company", id, null, { recovery_email: email });
+  return json({ id, recovery_email: email });
+}
 
 async function createTicket(env: Env, company: any, req: Request): Promise<Response> {
   const b = (await req.json().catch(() => ({}))) as Record<string, any>;
@@ -408,7 +419,7 @@ export default {
     const p = url.pathname;
 
     if (p === "/api/health") {
-      return json({ ok: true, service: "helpdesk", version: "0.1.0", ai: env.AI_PROVIDER });
+      return json({ ok: true, service: "helpdesk", version: "0.1.0", commit: VERSION.commit, built: VERSION.built, ai: env.AI_PROVIDER });
     }
 
     if (p.startsWith("/api/")) {
@@ -445,10 +456,11 @@ export default {
           if (company.is_provider !== 1) return json({ error: "jen provider-admin" }, 403);
           if (p === "/api/admin/companies" && req.method === "GET") return await listCompanies(env);
           if (p === "/api/admin/companies" && req.method === "POST") return await createCompany(env, req);
-          const am = p.match(/^\/api\/admin\/companies\/([^/]+)(\/token|\/revoke)$/);
+          const am = p.match(/^\/api\/admin\/companies\/([^/]+)(\/token|\/revoke|\/email)$/);
           if (am && req.method === "POST") {
             if (am[2] === "/token") return await setCompanyToken(env, am[1], req);
             if (am[2] === "/revoke") return await revokeCompany(env, am[1]);
+            if (am[2] === "/email") return await setCompanyEmail(env, am[1], req);
           }
         }
 

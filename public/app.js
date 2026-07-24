@@ -1,6 +1,7 @@
 /* HelpDesk SPA — vanilla, mluví s /api. i18n CS/EN. */
 (function () {
   const app = document.getElementById("app");
+  { const th = localStorage.getItem("hd_theme"); if (th) document.documentElement.dataset.theme = th; }
   const state = {
     token: localStorage.getItem("hd_token") || "",
     lang: localStorage.getItem("hd_lang") || "cs",
@@ -29,7 +30,7 @@
       copied: "Zkopírováno", m1: "1 měsíc", m6: "6 měsíců", m12: "12 měsíců", preset: "rychle",
       projects_nav: "Projekty", new_project: "Nový projekt", project_key: "Klíč", max_depth: "Max. hloubka",
       visibility_col: "Viditelnost", save: "Uložit", revoke_self: "Nelze revokovat vlastní přístup",
-      admin_email: "E-mail admina", permanent: "trvalý 🔒" },
+      admin_email: "E-mail admina", permanent: "trvalý 🔒", theme: "Motiv (světlý/tmavý)" },
     en: { app: "HelpDesk", login_p: "Enter your company access token", token_ph: "company token",
       connect: "Connect", tickets: "Tickets", new_ticket: "New ticket", logout: "Log out",
       back: "← Back", number: "No.", title: "Title", status: "Status", priority: "Priority",
@@ -49,7 +50,7 @@
       copied: "Copied", m1: "1 month", m6: "6 months", m12: "12 months", preset: "quick",
       projects_nav: "Projects", new_project: "New project", project_key: "Key", max_depth: "Max depth",
       visibility_col: "Visibility", save: "Save", revoke_self: "Cannot revoke your own access",
-      admin_email: "Admin email", permanent: "permanent 🔒" },
+      admin_email: "Admin email", permanent: "permanent 🔒", theme: "Theme (light/dark)" },
   };
   const t = (k) => (T[state.lang][k] ?? T.cs[k] ?? k);
 
@@ -209,6 +210,8 @@
       <span class="spacer"></span>
       ${nav}
       <span class="chip ${on ? "" : "off"}"><span class="dot">●</span> ${on ? "AI · " + esc(ai) : "AI off"}</span>
+      <span class="chip" title="build ${esc((state.health && state.health.built) || "")}">${esc((state.health && state.health.commit) || "dev")}</span>
+      <button class="btn ghost sm" data-act="theme" title="${t("theme")}">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button>
       <button class="btn ghost sm" data-act="lang">${state.lang.toUpperCase()}</button>
       <button class="btn ghost sm" data-act="logout">${t("logout")}</button></header>`;
   }
@@ -226,7 +229,7 @@
       return `<tr>
         <td>${esc(c.name)} ${c.is_provider ? `<span class="tag-int" style="color:var(--accent);border-color:var(--accent)">admin</span>` : ""}</td>
         <td class="mono" data-act="copy" data-tok="${esc(c.token || "")}" title="${t("copy")}" style="cursor:pointer">${esc((c.token || "").slice(0, 10))}…</td>
-        <td><input id="em_${c.id}" type="email" value="${esc(c.recovery_email || "")}" placeholder="${t("admin_email")}" style="max-width:180px"/></td>
+        <td><input id="em_${c.id}" type="email" value="${esc(c.recovery_email || "")}" placeholder="${t("admin_email")}" data-change="cmail" data-id="${esc(c.id)}" style="max-width:180px"/></td>
         <td><div class="rowacts">${expCell}</div></td>
         <td class="num">${c.projects}</td>
         <td><div class="rowacts">
@@ -252,7 +255,8 @@
       <h1>🎫 ${t("app")}</h1><p>${t("login_p")}</p>
       <div class="field"><input id="token" placeholder="${t("token_ph")}" value="${esc(state.token)}"/></div>
       <button class="btn primary" data-act="connect" style="width:100%">${t("connect")}</button>
-      <div style="margin-top:14px"><button class="btn ghost sm" data-act="lang">${state.lang.toUpperCase()}</button></div>
+      <div style="margin-top:14px"><button class="btn ghost sm" data-act="lang">${state.lang.toUpperCase()}</button>
+      <button class="btn ghost sm" data-act="theme" title="${t("theme")}">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button></div>
     </div></div>`;
   }
   function viewList() {
@@ -367,6 +371,7 @@
       if (act === "connect") { const v = document.getElementById("token").value.trim(); if (!v) return; state.token = v; localStorage.setItem("hd_token", v); await boot(); }
       else if (act === "logout") { localStorage.removeItem("hd_token"); state.token = ""; state.current = null; state.view = "login"; render(); }
       else if (act === "lang") { state.lang = state.lang === "cs" ? "en" : "cs"; localStorage.setItem("hd_lang", state.lang); render(); }
+      else if (act === "theme") { const n = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = n; localStorage.setItem("hd_theme", n); render(); }
       else if (act === "goto-create") { state.view = "create"; render(); }
       else if (act === "goto-list") { state.view = "list"; await loadTickets(); }
       else if (act === "open") { await openTicket(el.dataset.id); }
@@ -393,6 +398,10 @@
       const target = document.getElementById(el.dataset.target);
       if (target) target.value = el.value ? new Date(Date.now() + parseInt(el.value) * 86400000).toISOString().slice(0, 10) : "";
       el.value = "";
+    }
+    else if (el.dataset.change === "cmail") {
+      try { await api("/admin/companies/" + el.dataset.id + "/email", { method: "POST", body: JSON.stringify({ email: el.value.trim() }) }); toast(t("save")); }
+      catch (err) { toast((err.data && err.data.error) || "Chyba", true); }
     }
   });
 

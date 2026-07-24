@@ -7,7 +7,9 @@
   "author": "Milan Trnka (maxferit)",
   "license": "UNLICENSED",
   "scripts": {
+    "predev": "node scripts/gen-version.mjs",
     "dev": "wrangler dev",
+    "predeploy": "node scripts/gen-version.mjs",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "db:init": "wrangler d1 execute helpdesk-db --file=schema.sql",
