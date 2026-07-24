@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.7 — 2026-07-24 · Ops konzole (dle ITDashboardu)
+- **Terminál = pasivní živý log** auditu (polling 2,5 s, monospace, barvy dle akce, pauza / filtr / copy, auto-scroll).
+- **Historie** — filtrovatelný audit (akce, entita, limit).
+- **KPI** — stat-tiles („zelená na nule", barevné jen při problému) + legenda metrik. `GET /api/admin/kpi`.
+- **Nastavení** — systém (AI backend, verze) + retenční politika (GDPR editor).
+- **Dokumentace** — administrátorský návod ke konzoli.
+- `GET /api/admin/audit` (filtr action/entity/limit); oba jen provider-admin.
+
 ## v0.1.6 — 2026-07-24 · Admin terminál
 - Terminál v admin konzoli (jen provider): `help`, `stats`, `companies`, `projects`, `audit [n]`, `sql <SELECT>` (read-only), `clear`.
 - `POST /api/admin/terminal`; SQL jen SELECT (bez `;`), výstup jako textová tabulka; historie příkazů (šipky).
