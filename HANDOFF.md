@@ -52,6 +52,7 @@ docs/                 prezentace.html, manazersky-vystup.html, STATUS(.en).md
 - [x] **JIRA klíče + Projekty + Easy** — alfanumerická čísla ticketů (IT-270, per-projekt), sekce Projekty (podmínky projektu), Easy mód = jen popis (AI dopočítá zbytek); ověřeno + nasazeno
 - [x] **Bezpečnost adminu + verze + dark mode** — admin token trvalý (neexpiruje), bezešvá výměna vlastního tokenu, recovery e-mail (auto-save), commit+čas buildu v hlavičce (`gen-version.mjs`), přepínač motivu (data-theme)
 - [x] **Kontakty + pozvánky + běžící hodiny** — sekce Kontakty (lidé + role/oprávnění), pozvánka e-mailem → self-service uživatel (`/api/invite*`, HMAC token), živé hodiny v hlavičce; ověřeno + nasazeno
+- [x] **Admin terminál** — konzole v admin sekci (`stats`/`companies`/`projects`/`audit`/read-only `sql`), jen provider; ověřeno + nasazeno
 - [x] Dokumentace CS+EN, prezentace, manažerský výstup
 - [x] **Produkční nasazení** — živě na helpdesk.maxferit.cz (custom doména + workers.dev), remote D1 + secret nastaveny
 - [ ] Další moduly: AI vrstva (`src/ai.ts`), rozpočet/schvalování, Gantt/Kanban/KPI, pozvánky, e-mail (teď stub)

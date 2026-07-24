@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.6 — 2026-07-24 · Admin terminál
+- Terminál v admin konzoli (jen provider): `help`, `stats`, `companies`, `projects`, `audit [n]`, `sql <SELECT>` (read-only), `clear`.
+- `POST /api/admin/terminal`; SQL jen SELECT (bez `;`), výstup jako textová tabulka; historie příkazů (šipky).
+
 ## v0.1.5 — 2026-07-24 · Kontakty + pozvánky, běžící hodiny
 - **Kontakty**: seznam lidí firmy + role/oprávnění; pozvání e-mailem vytvoří odkaz (zkopíruje se do schránky).
 - **Pozvánka → uživatel**: veřejné `/api/invite` + `/api/invite/accept` (bez tokenu firmy) — po potvrzení vznikne `user` + `membership` (scope + role z pozvánky). HMAC token (token.ts), heslo volitelné (PBKDF2).
