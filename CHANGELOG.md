@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.5 — 2026-07-24 · Kontakty + pozvánky, běžící hodiny
+- **Kontakty**: seznam lidí firmy + role/oprávnění; pozvání e-mailem vytvoří odkaz (zkopíruje se do schránky).
+- **Pozvánka → uživatel**: veřejné `/api/invite` + `/api/invite/accept` (bez tokenu firmy) — po potvrzení vznikne `user` + `membership` (scope + role z pozvánky). HMAC token (token.ts), heslo volitelné (PBKDF2).
+- **Běžící hodiny** v hlavičce (živý čas); commit chip = ověření verze (build čas v tooltipu).
+- Ověřeno lokálně i naživo (pozvi → přijmi → kontakt s rolí).
+
 ## v0.1.4 — 2026-07-24 · Bezpečnost adminu, verze, dark mode
 - Admin (provider) token **neexpiruje** (backend vynucuje null); regenerace vlastního = **bezešvá výměna session**; blok revokace sebe sama.
 - `recovery_email` admina (migrace 0003) — **auto-save** při odchodu z pole (`POST /api/admin/companies/:id/email`).
