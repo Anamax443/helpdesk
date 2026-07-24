@@ -7,6 +7,8 @@ per-company SLA, planner (Gantt / Kanban / team capacity), management KPIs, a sw
 (free Workers AI / paid Claude), and an auditable trail. **Easy mode** (a non-technical user just describes
 the problem, AI classifies it) and **Extended mode** (full form).
 
+**Live:** https://helpdesk.maxferit.cz
+
 🇨🇿 Česky: [README.md](./README.md)
 
 ## Quick start

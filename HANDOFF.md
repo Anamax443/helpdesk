@@ -4,6 +4,8 @@ Cloudový ticket/helpdesk systém na **maxferit.com**. Zákaznický helpdesk (mo
 nad stromovou strukturou práce (epic → úkol → podúkol, model JIRA), s SLA, plánovačem,
 KPI, přepínatelnou AI vrstvou a doložitelným auditem.
 
+**Živě:** https://helpdesk.maxferit.cz · https://helpdesk.bass443.workers.dev
+
 **Návrhový dokument (živý, místo pravdy pro architekturu):**
 https://claude.ai/code/artifact/efc9654c-c8f4-45e4-b7de-325fc11e6365
 
@@ -17,7 +19,7 @@ https://claude.ai/code/artifact/efc9654c-c8f4-45e4-b7de-325fc11e6365
 
 ## Struktura
 ```
-schema.sql            D1 model (16 tabulek)
+schema.sql            D1 model (15 tabulek)
 src/index.ts          Worker: router + API (health, projects, meta, tickets, messages, status)
 src/types.ts          Env + stavy + povolené přechody
 src/token.ts          HMAC pozvánkové tokeny
@@ -37,12 +39,12 @@ docs/                 prezentace.html, manazersky-vystup.html, STATUS(.en).md
   billable / práh / podpis zákazníka. `issue.billable` + `issue.approval_state`.
 
 ## Stav
-- [x] `schema.sql` — kompletní zmrazený model (16 tabulek)
+- [x] `schema.sql` — kompletní zmrazený model (15 tabulek)
 - [x] Worker jádro: health, projects, meta, list/create/get ticketu, zprávy, změna stavu (validace přechodů), audit, DO
 - [x] **Frontend SPA** — login tokenem, seznam, Easy/Extended zakládání, detail + vlákna + přechody, i18n CS/EN
 - [x] **Verify-core** — `tsc` 0 chyb + lokální `wrangler dev` smoke test prošel (create/message/status + guardy 400/401)
 - [x] Dokumentace CS+EN, prezentace, manažerský výstup
-- [ ] Produkční nasazení (D1/R2 remote + deploy) — viz níže
+- [x] **Produkční nasazení** — živě na helpdesk.maxferit.cz (custom doména + workers.dev), remote D1 + secret nastaveny
 - [ ] Další moduly: AI vrstva (`src/ai.ts`), rozpočet/schvalování, Gantt/Kanban/KPI, pozvánky, e-mail (teď stub)
 
 ## Backlog — provider-admin konzole (tokeny firem)
@@ -62,11 +64,15 @@ npm run dev                                # http://127.0.0.1:8787  (login token
 ```
 > Pozn.: `wrangler dev` poslouchá na `127.0.0.1` (ne `localhost`/IPv6). AI binding je remote (jen warning).
 
-## Nasazení (produkce, účet bass443)
+## Nasazení (produkce, účet bass443 — HOTOVO)
+Živě na **helpdesk.maxferit.cz** (custom doména) + **helpdesk.bass443.workers.dev**.
+Pozn.: `maxferit.com` NENÍ zóna v CF účtu bass443 — nasazeno na `maxferit.cz` (jako aukce.maxferit.cz).
+Pro `.com` je nutné nejdřív přidat zónu `maxferit.com` do CF.
 ```powershell
-wrangler d1 create helpdesk-db             # database_id -> wrangler.jsonc
-wrangler d1 execute helpdesk-db --remote --file=schema.sql
-wrangler r2 bucket create helpdesk-attachments
-wrangler secret put INVITE_SECRET
-npm run deploy                             # -> helpdesk.maxferit.com
+wrangler d1 create helpdesk-db                            # [hotovo] database_id -> wrangler.jsonc
+wrangler d1 execute helpdesk-db --remote --file=schema.sql # [hotovo]
+wrangler secret put INVITE_SECRET                         # [hotovo]
+npm run deploy                                            # [hotovo] -> helpdesk.maxferit.cz
+# R2 (přílohy): OAuth token nemá r2 scope → binding dočasně vypnut. Po `wrangler login` (refresh):
+#   wrangler r2 bucket create helpdesk-attachments  + odkomentovat r2_buckets ve wrangler.jsonc + redeploy
 ```

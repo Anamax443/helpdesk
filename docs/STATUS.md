@@ -10,7 +10,7 @@ _Aktualizováno: 2026-07-24 · verze v0.1_ · 🇬🇧 [STATUS.en.md](./STATUS.e
 | Jádro Workeru (API) | ✅ Hotové, ověřené |
 | Frontend SPA | ✅ Hotové, ověřené |
 | Verify-core (typecheck + smoke test) | ✅ Prošel |
-| Produkční nasazení | 🔄 Probíhá |
+| Produkční nasazení | ✅ Živě — [helpdesk.maxferit.cz](https://helpdesk.maxferit.cz) |
 | AI vrstva / rozpočet / Gantt / Kanban / KPI | ⏳ Backlog |
 
 ## Hotové jádro

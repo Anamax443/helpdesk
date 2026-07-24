@@ -10,7 +10,7 @@ _Updated: 2026-07-24 · version v0.1_ · 🇨🇿 [STATUS.md](./STATUS.md)
 | Worker core (API) | ✅ Done, verified |
 | Frontend SPA | ✅ Done, verified |
 | Verify-core (typecheck + smoke test) | ✅ Passed |
-| Production deployment | 🔄 In progress |
+| Production deployment | ✅ Live — [helpdesk.maxferit.cz](https://helpdesk.maxferit.cz) |
 | AI layer / budget / Gantt / Kanban / KPI | ⏳ Backlog |
 
 ## Core done

@@ -4,7 +4,7 @@
 Jádro + frontend, ověřeno lokálně.
 
 ### Přidáno
-- Datový model D1 (`schema.sql`) — 16 tabulek: firmy/tenanti s tokenem, uživatelé, scoped role
+- Datový model D1 (`schema.sql`) — 15 tabulek: firmy/tenanti s tokenem, uživatelé, scoped role
   (membership + party), projekty, strom `issue` (epic → úkol → podúkol), závislosti, vláknové
   zprávy (sdílené/interní), přílohy, rozpočet po položkách, sledovatelé, pozvánky, SLA policy,
   AI návrhy, append-only audit, KPI snapshoty.
@@ -27,3 +27,7 @@ Jádro + frontend, ověřeno lokálně.
 
 ### Ověřeno
 - `tsc --noEmit` bez chyb; lokální smoke test (create/message/status + guardy 400/401).
+
+### Nasazeno
+- Cloudflare (bass443): živě na **helpdesk.maxferit.cz** + workers.dev; remote D1 + `INVITE_SECRET`.
+- Pozn.: `maxferit.com` není zóna v účtu → nasazeno na `maxferit.cz`. R2 binding dočasně vypnut (chybí r2 scope).

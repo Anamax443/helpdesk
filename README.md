@@ -7,6 +7,8 @@ SLA per firma, plánovač (Gantt / Kanban / kapacity týmu), manažerské KPI, p
 (free Workers AI / placený Claude), doložitelný audit. **Easy mód** (BFU jen popíše problém, AI zatřídí)
 i **Extended mód** (plný formulář).
 
+**Živě:** https://helpdesk.maxferit.cz
+
 🇬🇧 English: [README.en.md](./README.en.md)
 
 ## Rychlý start

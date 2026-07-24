@@ -6,9 +6,10 @@
   "workers_dev": true,
   "observability": { "enabled": true },
 
-  // Custom doména (zóna maxferit.com je v účtu bass443). wrangler vytvoří DNS + route.
+  // Custom doména. Pozn.: maxferit.com NENÍ zóna v účtu bass443 — je tam jen maxferit.cz
+  // (stejně jako aukce.maxferit.cz). Pro .com by se musela do CF přidat zóna maxferit.com.
   "routes": [
-    { "pattern": "helpdesk.maxferit.com", "custom_domain": true }
+    { "pattern": "helpdesk.maxferit.cz", "custom_domain": true }
   ],
 
   // Statické SPA (portál + interní konzole) servíruje stejný Worker.
@@ -20,13 +21,14 @@
   // Centrální relační data (multi-tenant, KPI, cross-firma dotazy).
   // database_id doplnit po `wrangler d1 create helpdesk-db`.
   "d1_databases": [
-    { "binding": "DB", "database_name": "helpdesk-db", "database_id": "REPLACE_AFTER_CREATE" }
+    { "binding": "DB", "database_name": "helpdesk-db", "database_id": "d74190c9-569c-4997-a72d-a2ae4a9a463d" }
   ],
 
-  // Přílohy + printscreeny (zero egress). Vytvořit: `wrangler r2 bucket create helpdesk-attachments`.
-  "r2_buckets": [
-    { "binding": "ATTACHMENTS", "bucket_name": "helpdesk-attachments" }
-  ],
+  // Přílohy + printscreeny (R2). Dočasně vypnuto — OAuth token nemá r2 scope.
+  // Po `wrangler login` (refresh scopes) + `wrangler r2 bucket create helpdesk-attachments` odkomentovat:
+  // "r2_buckets": [
+  //   { "binding": "ATTACHMENTS", "bucket_name": "helpdesk-attachments" }
+  // ],
 
   // Živý stav ticketu/vlákna + dvousměrný Gantt (WebSocket koordinace).
   "durable_objects": {
@@ -49,7 +51,7 @@
 
   // Necitlivé proměnné. Tajemství (INVITE_SECRET, ANTHROPIC_API_KEY) → `wrangler secret put`.
   "vars": {
-    "PUBLIC_BASE_URL": "http://localhost:8787",
+    "PUBLIC_BASE_URL": "https://helpdesk.maxferit.cz",
     // workers-ai (free, default) | claude (placené) | off — přepínatelný AI backend.
     "AI_PROVIDER": "workers-ai"
   }
